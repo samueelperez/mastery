@@ -4,6 +4,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -25,6 +26,7 @@ export function DrawdownChart({ curve }: DrawdownChartProps) {
     { peak: curve[0]?.[1] ?? 1, rows: [] },
   ).rows
   const worst = data.reduce((acc, d) => Math.min(acc, d.dd_pct), 0)
+  const worstTs = data.find((d) => d.dd_pct === worst)?.ts
 
   return (
     <div className="flex flex-col gap-2">
@@ -72,6 +74,21 @@ export function DrawdownChart({ curve }: DrawdownChartProps) {
               labelFormatter={(label) => fmtDate(label as string | number)}
               formatter={(value) => [`${Number(value).toFixed(2)}%`, "drawdown"]}
             />
+            {worstTs && (
+              <ReferenceLine
+                x={worstTs}
+                stroke="var(--color-destructive)"
+                strokeDasharray="2 2"
+                strokeOpacity={0.6}
+                label={{
+                  value: `${worst.toFixed(1)}%`,
+                  position: "top",
+                  fill: "var(--color-destructive)",
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                }}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="dd_pct"

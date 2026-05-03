@@ -13,11 +13,11 @@ interface MetricsCardProps {
 
 export function MetricsCard({ metrics: m }: MetricsCardProps) {
   return (
-    <Card className="border-border/60 bg-card/40">
+    <Card className="border-border bg-card">
       <CardContent className="space-y-4 pt-6">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
               deflated sharpe (López de Prado)
             </span>
             <span
@@ -91,7 +91,7 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
       <span

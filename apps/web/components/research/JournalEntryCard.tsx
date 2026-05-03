@@ -20,7 +20,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
   })
 
   return (
-    <Card className="border-border/60 bg-card/40">
+    <Card className="border-border bg-card">
       <CardHeader className="space-y-1.5 pb-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-mono text-sm tracking-tight text-foreground">
@@ -41,7 +41,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
               : `${trade.r_multiple > 0 ? "+" : ""}${trade.r_multiple.toFixed(2)}R`}
           </Badge>
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {fmt(trade.trade_ts)} · {trade.side} · {trade.setup_tag}
         </p>
       </CardHeader>
@@ -56,7 +56,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
         </div>
 
         <div>
-          <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             regime
           </p>
           <p className="font-mono text-xs text-foreground">{trade.regime}</p>
@@ -66,10 +66,10 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
           <>
             <Separator />
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 post-mortem
               </p>
-              <p className="text-xs leading-relaxed text-foreground/90">
+              <p className="text-xs leading-relaxed text-foreground">
                 {trade.mistakes}
               </p>
             </div>
@@ -77,7 +77,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
         )}
 
         {isLoading && (
-          <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
             <Spinner /> loading details…
           </div>
         )}
@@ -85,10 +85,10 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
           <>
             <Separator />
             <div>
-              <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 embedded text · v{data.embedding_version}
               </p>
-              <pre className="overflow-x-auto rounded-md bg-background/40 p-2 font-mono text-[10px] text-foreground/80">
+              <pre className="overflow-x-auto rounded-md bg-background p-2 font-mono text-[11px] text-muted-foreground">
                 {data.summary_text}
               </pre>
             </div>
@@ -102,7 +102,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
       <span className="font-mono text-sm tabular-nums text-foreground">

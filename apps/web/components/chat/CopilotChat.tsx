@@ -62,9 +62,9 @@ export function CopilotChat({ className }: CopilotChatProps) {
 
   return (
     <Card
-      className={`flex h-full flex-col overflow-hidden border-border/60 bg-card/40 ${className ?? ""}`}
+      className={`flex h-full flex-col overflow-hidden border-border bg-card ${className ?? ""}`}
     >
-      <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <BotIcon className="size-4 text-muted-foreground" />
         <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
           copilot · sonnet 4.6
@@ -88,7 +88,7 @@ export function CopilotChat({ className }: CopilotChatProps) {
                     key={s}
                     type="button"
                     onClick={() => sendMessage({ text: s })}
-                    className="rounded-md border border-border/60 bg-background/40 px-3 py-1.5 text-left text-xs text-foreground/80 hover:bg-accent/40"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent/40"
                   >
                     {s}
                   </button>

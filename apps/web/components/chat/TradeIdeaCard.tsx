@@ -71,7 +71,7 @@ function CitationBadges({ citations }: { citations: ToolCitation[] }) {
           </HoverCardTrigger>
           <HoverCardContent className="w-80 p-0">
             <div className="px-3 py-2">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              <div className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
                 {c.tool_name}
               </div>
               <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-relaxed">
@@ -104,25 +104,25 @@ function PriceCell({
 export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
   const dir = directionTone[idea.direction]
   return (
-    <Card className="border-border/60 bg-card/60">
+    <Card className="border-border bg-card">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="font-mono text-sm tracking-tight">
             {idea.symbol} · {idea.timeframe}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={cn("font-mono text-[10px]", dir.cls)}>
+            <Badge variant="outline" className={cn("font-mono text-[11px]", dir.cls)}>
               {dir.label}
             </Badge>
             <Badge
               variant="outline"
-              className={cn("font-mono text-[10px]", confidenceTone[idea.confidence])}
+              className={cn("font-mono text-[11px]", confidenceTone[idea.confidence])}
             >
               {idea.confidence.toUpperCase()}
             </Badge>
           </div>
         </div>
-        <CardDescription className="pt-1 text-xs leading-relaxed text-foreground/80">
+        <CardDescription className="pt-1 text-xs leading-relaxed text-muted-foreground">
           {idea.summary_es}
         </CardDescription>
       </CardHeader>
@@ -132,7 +132,7 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
       <CardContent className="space-y-3 pt-3 text-xs">
         {/* Regime */}
         <section>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
             Régimen
           </div>
           <div className="mt-1 flex items-center gap-2 font-mono">
@@ -144,7 +144,7 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
         {/* Confluences */}
         {idea.confluences.length > 0 && (
           <section>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
               Confluencias
             </div>
             <ul className="mt-1 space-y-1.5">
@@ -156,7 +156,7 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
                   <span className={cn("w-12 font-mono uppercase", biasTone[c.bias])}>
                     {c.bias}
                   </span>
-                  <span className="flex-1 text-foreground/80">
+                  <span className="flex-1 text-muted-foreground">
                     {c.reasons.join(" · ")}
                   </span>
                   <CitationBadges citations={c.citations} />
@@ -168,14 +168,14 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
 
         {/* Entry / Invalidation / Targets */}
         <section className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
             Niveles
           </div>
           <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1.5 font-mono">
             <span className="text-muted-foreground">Entry</span>
             <PriceCell value={idea.entry} citations={idea.entry_citations} />
             {idea.entry_rationale && (
-              <p className="col-span-2 -mt-0.5 text-[11px] text-foreground/70">
+              <p className="col-span-2 -mt-0.5 text-[11px] text-muted-foreground">
                 {idea.entry_rationale}
               </p>
             )}
@@ -186,7 +186,7 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
               citations={idea.invalidation_citations}
             />
             {idea.invalidation_rationale && (
-              <p className="col-span-2 -mt-0.5 text-[11px] text-foreground/70">
+              <p className="col-span-2 -mt-0.5 text-[11px] text-muted-foreground">
                 {idea.invalidation_rationale}
               </p>
             )}
@@ -196,7 +196,7 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
                 <span className="text-muted-foreground">{t.label}</span>
                 <div className="space-y-0.5">
                   <PriceCell value={t.price} citations={t.citations} />
-                  <p className="text-[11px] text-foreground/70">{t.rationale}</p>
+                  <p className="text-[11px] text-muted-foreground">{t.rationale}</p>
                 </div>
               </div>
             ))}

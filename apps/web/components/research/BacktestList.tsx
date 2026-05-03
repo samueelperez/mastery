@@ -30,7 +30,7 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
   }
   if (runs.length === 0) {
     return (
-      <Card className="border-dashed border-border/40 bg-card/20 p-6 text-center">
+      <Card className="border-dashed border-border bg-card/20 p-6 text-center">
         <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
           no backtests yet
         </p>
@@ -45,9 +45,9 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-border/40">
+    <div className="overflow-hidden rounded-md border border-border">
       <table className="w-full text-xs">
-        <thead className="bg-card/40 text-[10px] uppercase tracking-widest text-muted-foreground">
+        <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
           <tr>
             <Th>strategy</Th>
             <Th>symbol</Th>
@@ -126,7 +126,7 @@ function Th({
 }) {
   return (
     <th
-      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : "text-left"}`}
+      className={`px-3 py-2 pointer-coarse:py-4 font-medium ${align === "right" ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -144,7 +144,7 @@ function Td({
 }) {
   return (
     <td
-      className={`px-3 py-2 ${align === "right" ? "text-right" : "text-left"} ${mono ? "font-mono tabular-nums" : ""}`}
+      className={`px-3 py-2 pointer-coarse:py-4 ${align === "right" ? "text-right" : "text-left"} ${mono ? "font-mono tabular-nums" : ""}`}
     >
       {children}
     </td>

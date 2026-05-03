@@ -26,7 +26,7 @@ export function BacktestDetail({ run }: BacktestDetailProps) {
             {run.symbol} · {run.timeframe} · {fmtRange(run.range_start, run.range_end)}
           </span>
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           run_id <span className="text-foreground">{run.id}</span> · fees{" "}
           <span className="text-foreground">{run.fees_bps} bps</span> · slippage{" "}
           <span className="text-foreground">{run.slippage_atr} × ATR</span>
@@ -36,7 +36,7 @@ export function BacktestDetail({ run }: BacktestDetailProps) {
       {run.metrics && <MetricsCard metrics={run.metrics} />}
 
       {run.equity_curve.length > 0 ? (
-        <Card className="border-border/60 bg-card/40">
+        <Card className="border-border bg-card">
           <CardContent className="space-y-6 pt-6">
             <EquityCurve curve={run.equity_curve} initialEquity={initialEquity} />
             <Separator />
@@ -49,12 +49,12 @@ export function BacktestDetail({ run }: BacktestDetailProps) {
         </p>
       )}
 
-      <Card className="border-border/60 bg-card/40">
+      <Card className="border-border bg-card">
         <CardContent className="pt-6">
           <h3 className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
             params
           </h3>
-          <pre className="overflow-x-auto rounded-md bg-background/40 p-3 font-mono text-xs text-foreground/90">
+          <pre className="overflow-x-auto rounded-md bg-background p-3 font-mono text-xs text-foreground">
             {JSON.stringify(run.params, null, 2)}
           </pre>
         </CardContent>

@@ -33,7 +33,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
   }
   if (trades.length === 0) {
     return (
-      <Card className="border-dashed border-border/40 bg-card/20 p-6 text-center">
+      <Card className="border-dashed border-border bg-card/20 p-6 text-center">
         <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
           no trades logged yet
         </p>
@@ -47,9 +47,9 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-      <div className="overflow-hidden rounded-md border border-border/40">
+      <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-xs">
-          <thead className="bg-card/40 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
             <tr>
               <Th>date</Th>
               <Th>symbol</Th>
@@ -115,7 +115,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
                 </Td>
                 <Td>{t.setup_tag}</Td>
                 <Td className="text-muted-foreground">{t.regime}</Td>
-                <Td className="text-muted-foreground text-[10px] uppercase">
+                <Td className="text-muted-foreground text-[11px] uppercase">
                   {t.mode.replace("_", " ")}
                 </Td>
               </tr>
@@ -127,7 +127,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
         {selected ? (
           <JournalEntryCard trade={selected} />
         ) : (
-          <Card className="border-dashed border-border/40 bg-card/20 p-6 text-center">
+          <Card className="border-dashed border-border bg-card/20 p-6 text-center">
             <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               click a trade to inspect
             </p>
@@ -147,7 +147,7 @@ function Th({
 }) {
   return (
     <th
-      className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : "text-left"}`}
+      className={`px-3 py-2 pointer-coarse:py-4 font-medium ${align === "right" ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -168,7 +168,7 @@ function Td({
   return (
     <td
       className={cn(
-        "px-3 py-2",
+        "px-3 py-2 pointer-coarse:py-4",
         align === "right" ? "text-right" : "text-left",
         mono && "font-mono tabular-nums",
         className,

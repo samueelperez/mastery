@@ -23,7 +23,7 @@ export function ResearchNav() {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "rounded-md px-2.5 py-1.5 font-mono text-xs uppercase tracking-wide transition-colors duration-150 ease-out",
+              "rounded-md px-2.5 py-1.5 pointer-coarse:py-3 font-mono text-xs uppercase tracking-wide transition-colors duration-150 ease-out",
               active
                 ? "bg-accent/30 text-foreground"
                 : "text-muted-foreground hover:bg-accent/20 hover:text-foreground",

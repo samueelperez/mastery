@@ -6,7 +6,7 @@ import { CopilotChat } from "@/components/chat/CopilotChat"
 export default function Page() {
   return (
     <main className="flex min-h-svh flex-col gap-4 p-6">
-      <header className="flex items-baseline justify-between border-b border-border/40 pb-3">
+      <header className="flex items-baseline justify-between border-b border-border pb-3">
         <div>
           <h1 className="font-mono text-sm tracking-tight text-foreground">
             trading-copilot
@@ -18,18 +18,18 @@ export default function Page() {
         <div className="flex items-center gap-4">
           <Link
             href="/research"
-            className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
           >
             research →
           </Link>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             Binance USDT-M · MAINNET-RO
           </span>
         </div>
       </header>
 
       <section className="grid h-[calc(100svh-9rem)] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
-        <div className="overflow-hidden rounded-lg border border-border/40 bg-card/40 p-3">
+        <div className="overflow-hidden rounded-lg border border-border bg-card p-3">
           <LiveBtcChart
             symbol="BTCUSDT"
             timeframe="1h"

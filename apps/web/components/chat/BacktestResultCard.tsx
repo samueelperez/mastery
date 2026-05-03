@@ -32,7 +32,7 @@ interface BacktestResultCardProps {
 
 export function BacktestResultCard({ output: o, input }: BacktestResultCardProps) {
   return (
-    <Card className="border-border/60 bg-card/40">
+    <Card className="border-border bg-card">
       <CardHeader className="space-y-1 pb-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className="font-mono text-sm tracking-tight text-foreground">
@@ -50,7 +50,7 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
             </Badge>
           )}
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
           {input?.symbol ?? "—"} · {input?.timeframe ?? "—"} · {o.n_trades} trades · run_id{" "}
           <span className="text-foreground">{o.run_id.slice(0, 8)}</span>
         </p>
@@ -68,7 +68,6 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
                   : "bad"
             }
           />
-          <Stat label="sharpe" value={o.sharpe.toFixed(2)} />
           <Stat
             label="max DD"
             value={`${(o.max_drawdown * 100).toFixed(1)}%`}
@@ -79,14 +78,12 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
             value={`${o.expectancy_R.toFixed(2)}R`}
             highlight={o.expectancy_R < 0 ? "bad" : "good"}
           />
-          <Stat label="win rate" value={`${(o.win_rate * 100).toFixed(0)}%`} />
-          <Stat label="trades" value={o.n_trades.toString()} />
         </div>
         <Link
           href={`/research/backtests/${o.run_id}`}
-          className="group flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+          className="group flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
         >
-          equity curve + full metrics
+          full metrics + equity curve
           <ArrowUpRightIcon className="size-3 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </CardContent>
@@ -105,7 +102,7 @@ function Stat({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
       <span

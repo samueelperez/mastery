@@ -4,6 +4,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -72,6 +73,19 @@ export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
               }}
               labelFormatter={(label) => fmtDate(label as string | number)}
               formatter={(value) => [`$${Number(value).toFixed(2)}`, "equity"]}
+            />
+            <ReferenceLine
+              y={initialEquity}
+              stroke="var(--color-muted-foreground)"
+              strokeDasharray="3 3"
+              strokeOpacity={0.5}
+              label={{
+                value: "initial",
+                position: "right",
+                fill: "var(--color-muted-foreground)",
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+              }}
             />
             <Area
               type="monotone"

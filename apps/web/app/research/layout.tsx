@@ -15,7 +15,7 @@ export default function ResearchLayout({
 }) {
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="flex items-center gap-4 border-b border-border/40 px-6 py-3">
+      <header className="flex items-center gap-4 border-b border-border px-6 py-3">
         <Link
           href="/"
           className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground"
@@ -26,12 +26,12 @@ export default function ResearchLayout({
         <span className="font-mono text-sm tracking-tight text-foreground">
           research
         </span>
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          F2 · backtests + journal
+        <span className="ml-auto font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          Binance USDT-M · MAINNET-RO
         </span>
       </header>
       <div className="grid flex-1 grid-cols-[12rem_minmax(0,1fr)]">
-        <aside className="border-r border-border/40 px-3 py-4">
+        <aside className="border-r border-border px-3 py-4">
           <ResearchNav />
         </aside>
         <main className="overflow-x-hidden p-6">{children}</main>
