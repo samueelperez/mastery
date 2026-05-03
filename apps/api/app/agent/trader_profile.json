@@ -1,0 +1,9 @@
+{
+  "language": "es",
+  "preferred_timeframes": ["1h", "4h", "1d"],
+  "instruments": ["BTCUSDT"],
+  "max_leverage": 5,
+  "risk_per_trade_pct": 1.0,
+  "style": "swing",
+  "notes_for_agent": "Prefer setups con ≥2 de 3 confluencias higher-TF. Always state slippage and funding caveats. Never propose live execution; this is analysis only."
+}

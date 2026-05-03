@@ -29,6 +29,11 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
 
+    # LLM provider — F1 chat agent. Pydantic AI's OpenRouterProvider reads this
+    # directly from the env, but we surface it on Settings so /health can flag a
+    # missing key cleanly and tests can override it.
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -36,6 +36,10 @@ dependencies = [
 
   # Cmdline tooling
   "typer>=0.15.1",
+
+  # LLM agent (F1+). pydantic-ai-slim with extras keeps the dep tree small;
+  # we don't pull OpenAI/Gemini providers we won't use.
+  "pydantic-ai-slim[openrouter,vercel-ai]>=1.89.0",
 ]
 
 [dependency-groups]
@@ -84,6 +88,11 @@ ignore = [
   # across every finance API and library (Binance, CCXT, polars-ta, TA-Lib, ...).
   # Renaming would diverge from the entire ecosystem.
   "E741",
+  # Docstrings in indicator/quant code use Greek letters (α, β, σ) and math
+  # operators (·, −, ×, ≤, ≥) that ruff flags as "ambiguous unicode". Forcing
+  # ASCII would make formulas unreadable.
+  "RUF002", # ambiguous unicode in docstring
+  "RUF003", # ambiguous unicode in comment
 ]
 
 [tool.mypy]

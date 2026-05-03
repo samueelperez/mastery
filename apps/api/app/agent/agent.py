@@ -1,0 +1,73 @@
+"""Agent factory + singleton.
+
+Built once at module import so the system prompt + tool catalogue stay byte-stable
+across requests (essential for prompt caching).
+"""
+
+from __future__ import annotations
+
+from pydantic_ai import Agent
+from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings
+from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+from app.agent.deps import AgentDeps
+from app.agent.models import TradeIdea
+from app.agent.system_prompt import build_system_blocks
+from app.agent.tools.confluence import register_confluence_tools
+from app.agent.tools.indicators import register_indicator_tools
+from app.agent.tools.ohlcv import register_ohlcv_tools
+from app.agent.tools.structure import register_structure_tools
+from app.agent.validators import register_validators
+from app.config import get_settings
+
+# Default model for chat. Deep-dive (Opus 4.7) is plumbed in but not toggled
+# automatically in F1 — F2 will surface a UI selector.
+DEFAULT_MODEL_ID = "anthropic/claude-sonnet-4.6"
+
+
+def build_agent() -> Agent[AgentDeps, TradeIdea | str]:
+    api_key = get_settings().openrouter_api_key
+    if not api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is not set. Add it to apps/api/.env "
+            "(get a key at https://openrouter.ai/keys)."
+        )
+    # Explicit provider so the key flows from Settings (which read from .env),
+    # not from os.environ — the latter would only work when uvicorn auto-loads it.
+    model = OpenRouterModel(
+        DEFAULT_MODEL_ID,
+        provider=OpenRouterProvider(api_key=api_key),
+    )
+    settings = OpenRouterModelSettings(
+        max_tokens=8000,
+        # Cross-provider thinking knob; Pydantic AI maps "medium" to Anthropic
+        # adaptive thinking with effort=medium when targeting a Claude model.
+        thinking="medium",
+        # Keep usage details in the response so we can audit cache hits later.
+        openrouter_usage={"include": True},
+    )
+    agent = Agent[AgentDeps, TradeIdea | str](
+        model,
+        deps_type=AgentDeps,
+        output_type=TradeIdea | str,  # type: ignore[arg-type]
+        system_prompt=build_system_blocks(),
+        model_settings=settings,
+        retries=2,  # ModelRetries the validator can trigger before giving up
+    )
+    register_ohlcv_tools(agent)
+    register_indicator_tools(agent)
+    register_structure_tools(agent)
+    register_confluence_tools(agent)
+    register_validators(agent)
+    return agent
+
+
+# Lazy singleton — created on first access so test imports don't require a key.
+_agent_instance: Agent[AgentDeps, TradeIdea | str] | None = None
+
+
+def get_agent() -> Agent[AgentDeps, TradeIdea | str]:
+    global _agent_instance
+    if _agent_instance is None:
+        _agent_instance = build_agent()
+    return _agent_instance

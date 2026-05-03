@@ -21,10 +21,14 @@ from app.storage.ohlcv_repo import upsert_one
 log = structlog.get_logger(__name__)
 
 
-# (symbol, timeframe) pairs to ingest. F0 minimum.
+# (symbol, timeframe) pairs to ingest. F1 expands the higher TFs the agent uses
+# for multi-TF confluence + structure analysis.
 WATCH_LIST: list[tuple[str, str]] = [
     ("BTCUSDT", "1m"),
+    ("BTCUSDT", "15m"),
     ("BTCUSDT", "1h"),
+    ("BTCUSDT", "4h"),
+    ("BTCUSDT", "1d"),
 ]
 
 

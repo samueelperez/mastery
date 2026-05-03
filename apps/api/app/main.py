@@ -6,6 +6,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.ohlcv import router as ohlcv_router
 from app.api.ws import router as ws_router
@@ -53,10 +54,13 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # AI SDK v6 needs to read these to detect the data-stream protocol.
+        expose_headers=["x-vercel-ai-ui-message-stream", "content-type"],
     )
     app.include_router(health_router)
     app.include_router(ohlcv_router)
     app.include_router(ws_router)
+    app.include_router(chat_router)
     return app
 
 
