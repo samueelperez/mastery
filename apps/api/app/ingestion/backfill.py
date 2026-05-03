@@ -81,9 +81,7 @@ async def _run(symbol: str, timeframe: str, years: float) -> None:
                     page=page,
                     last_ts=last_ts.isoformat(),
                     inserted_total=total_inserted,
-                    cursor_pct=round(
-                        (cursor_ms - since_ms) / max(end_ms - since_ms, 1) * 100, 1
-                    ),
+                    cursor_pct=round((cursor_ms - since_ms) / max(end_ms - since_ms, 1) * 100, 1),
                 )
 
             # Safety: ensure we make progress; otherwise CCXT is returning the same page.

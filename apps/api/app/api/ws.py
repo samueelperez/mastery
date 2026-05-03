@@ -7,6 +7,7 @@ Client receives one JSON message per kline update (every WS tick from Binance).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import orjson
 import structlog
@@ -50,9 +51,7 @@ async def market_ws(
     except asyncio.CancelledError:
         log.info("ws.cancelled", channel=channel)
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("ws.error", channel=channel, error=str(exc))
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass

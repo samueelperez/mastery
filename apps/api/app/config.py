@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     api_log_level: str = Field(default="INFO", alias="API_LOG_LEVEL")
 
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:3000,http://localhost:3001",
         alias="CORS_ORIGINS",
     )
 

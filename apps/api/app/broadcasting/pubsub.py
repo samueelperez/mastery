@@ -64,13 +64,16 @@ async def subscribe(channel: str) -> AsyncIterator[redis.client.PubSub]:
         yield pubsub
     finally:
         await pubsub.unsubscribe(channel)
-        await pubsub.aclose()
+        await pubsub.aclose()  # type: ignore[no-untyped-call]
 
 
 async def ping() -> bool:
     """Returns True if Valkey responds to PING; False otherwise. Best-effort."""
     try:
         client = get_client()
-        return bool(await client.ping())
+        # `client.ping()` is async on redis.asyncio; mypy's stubs flag the
+        # union return type loosely.
+        result: object = await client.ping()  # type: ignore[misc]
+        return bool(result)
     except Exception:
         return False

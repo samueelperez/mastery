@@ -34,11 +34,15 @@ async def bulk_upsert(session: AsyncSession, candles: Iterable[OHLCVCandle]) -> 
     if not rows:
         return 0
 
-    stmt = insert(OHLCV).values(rows).on_conflict_do_nothing(
-        index_elements=["exchange", "symbol", "timeframe", "ts"]
+    stmt = (
+        insert(OHLCV)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=["exchange", "symbol", "timeframe", "ts"])
     )
     result = await session.execute(stmt)
-    return result.rowcount or 0
+    # rowcount lives on CursorResult (sync) but mypy sees the async base type;
+    # at runtime asyncpg backs this with a real CursorResult.
+    return getattr(result, "rowcount", 0) or 0
 
 
 async def upsert_one(session: AsyncSession, candle: OHLCVCandle) -> bool:
@@ -47,21 +51,23 @@ async def upsert_one(session: AsyncSession, candle: OHLCVCandle) -> bool:
     Used by live ingestion when a candle closes — we only persist closed
     candles so backfill remains the source of truth for historical data.
     """
-    stmt = insert(OHLCV).values(
-        exchange=candle.exchange,
-        symbol=candle.symbol,
-        timeframe=candle.timeframe,
-        ts=candle.ts,
-        o=candle.o,
-        h=candle.h,
-        l=candle.l,
-        c=candle.c,
-        v=candle.v,
-    ).on_conflict_do_nothing(
-        index_elements=["exchange", "symbol", "timeframe", "ts"]
+    stmt = (
+        insert(OHLCV)
+        .values(
+            exchange=candle.exchange,
+            symbol=candle.symbol,
+            timeframe=candle.timeframe,
+            ts=candle.ts,
+            o=candle.o,
+            h=candle.h,
+            l=candle.l,
+            c=candle.c,
+            v=candle.v,
+        )
+        .on_conflict_do_nothing(index_elements=["exchange", "symbol", "timeframe", "ts"])
     )
     result = await session.execute(stmt)
-    return (result.rowcount or 0) == 1
+    return (getattr(result, "rowcount", 0) or 0) == 1
 
 
 async def fetch_range(
@@ -103,9 +109,13 @@ async def count_rows(
 ) -> int:
     from sqlalchemy import func
 
-    stmt = select(func.count()).select_from(OHLCV).where(
-        OHLCV.exchange == exchange,
-        OHLCV.symbol == symbol,
-        OHLCV.timeframe == timeframe,
+    stmt = (
+        select(func.count())
+        .select_from(OHLCV)
+        .where(
+            OHLCV.exchange == exchange,
+            OHLCV.symbol == symbol,
+            OHLCV.timeframe == timeframe,
+        )
     )
     return int((await session.execute(stmt)).scalar_one())

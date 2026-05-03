@@ -8,6 +8,7 @@ For F0 we hardcode BTCUSDT @ 1m and 1h; F1 will accept a config-driven set.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import structlog
 
@@ -58,12 +59,15 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
                         await upsert_one(session, candle)
                     last_persisted_ts = candle.ts
                     log.debug(
-                        "ingest.persist", symbol=symbol, timeframe=timeframe, ts=candle.ts.isoformat()
+                        "ingest.persist",
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        ts=candle.ts.isoformat(),
                     )
         except asyncio.CancelledError:
             log.info("ingest.watch.cancelled", symbol=symbol, timeframe=timeframe)
             raise
-        except Exception as exc:  # noqa: BLE001 — top-level resilient loop
+        except Exception as exc:
             log.warning(
                 "ingest.watch.error",
                 symbol=symbol,
@@ -98,10 +102,8 @@ class LiveIngestion:
         for t in self._tasks:
             t.cancel()
         for t in self._tasks:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t
-            except asyncio.CancelledError:
-                pass
         self._tasks.clear()
         if self._adapter is not None:
             await self._adapter.close()

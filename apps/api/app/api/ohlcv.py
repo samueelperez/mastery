@@ -42,9 +42,9 @@ async def get_ohlcv(
     symbol: str,
     timeframe: str,
     session: Annotated[AsyncSession, Depends(session_dependency)],
-    since: datetime | None = Query(default=None),
-    until: datetime | None = Query(default=None),
-    limit: int = Query(default=1000, ge=1, le=10_000),
+    since: Annotated[datetime | None, Query()] = None,
+    until: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=10_000)] = 1000,
 ) -> OHLCVResponse:
     rows = await fetch_range(
         session,
@@ -60,7 +60,5 @@ async def get_ohlcv(
         symbol=symbol.upper(),
         timeframe=timeframe,
         count=len(rows),
-        candles=[
-            CandleOut(ts=r.ts, o=r.o, h=r.h, l=r.l, c=r.c, v=r.v) for r in rows
-        ],
+        candles=[CandleOut(ts=r.ts, o=r.o, h=r.h, l=r.l, c=r.c, v=r.v) for r in rows],
     )

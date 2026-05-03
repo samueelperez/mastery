@@ -25,7 +25,7 @@ from app.data.normalizer import normalize_ccxt_ohlcv
 from app.data.types import OHLCVCandle
 
 if TYPE_CHECKING:
-    from ccxt.async_support.base.exchange import Exchange  # noqa: TC003
+    from ccxt.async_support.base.exchange import Exchange
 
 
 log = structlog.get_logger(__name__)

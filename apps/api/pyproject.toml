@@ -80,6 +80,10 @@ select = [
 ]
 ignore = [
   "E501", # line length handled by formatter
+  # `l` (lowercase L) is the canonical name for the LOW field in an OHLCV bar
+  # across every finance API and library (Binance, CCXT, polars-ta, TA-Lib, ...).
+  # Renaming would diverge from the entire ecosystem.
+  "E741",
 ]
 
 [tool.mypy]
@@ -87,6 +91,17 @@ python_version = "3.13"
 strict = true
 plugins = ["pydantic.mypy"]
 disallow_untyped_decorators = false # FastAPI decorators
+
+[[tool.mypy.overrides]]
+# CCXT does not ship type stubs.
+module = "ccxt.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# redis-py async pubsub return types are loose; we cast at call sites.
+module = "redis.*"
+ignore_missing_imports = false
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
