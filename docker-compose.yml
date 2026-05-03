@@ -1,0 +1,63 @@
+# Trading Copilot — data plane
+# Postgres 18 + TimescaleDB 2.23 + pgvector 0.8.x bundled in timescaledb-ha image.
+# Valkey 8 as cache and pub/sub.
+#
+# Bring up: docker compose up -d
+# Tear down: docker compose down
+# Reset volumes: docker compose down -v
+
+name: trading
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg18
+    container_name: trading-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading
+      POSTGRES_DB: trading
+      # Tune Timescale for a dev workstation (16-64 GB RAM typical Mac dev).
+      TS_TUNE_MEMORY: "4GB"
+      TS_TUNE_NUM_CPUS: "4"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading -d trading"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: trading-valkey
+    restart: unless-stopped
+    command:
+      - valkey-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres-data:
+    name: trading-postgres-data
+  valkey-data:
+    name: trading-valkey-data

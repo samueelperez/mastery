@@ -1,0 +1,91 @@
+[project]
+name = "trading-api"
+version = "0.0.0"
+description = "Trading Copilot — backend (FastAPI + Pydantic AI + CCXT)"
+requires-python = ">=3.13"
+readme = "README.md"
+
+dependencies = [
+  # Web framework
+  "fastapi>=0.136.0",
+  "uvicorn[standard]>=0.32.1",
+
+  # Validation + settings
+  "pydantic>=2.13.0",
+  "pydantic-settings>=2.7.0",
+
+  # Database — async
+  "sqlalchemy[asyncio]>=2.0.36",
+  "asyncpg>=0.30.0",
+  "alembic>=1.14.0",
+
+  # Cache + pub/sub. valkey-glide is the official Valkey client; falls back to redis-py wire protocol.
+  "valkey-glide>=2.1.0",
+
+  # Exchange data — CCXT 4.4+ ships CCXT Pro (WebSocket support) for free.
+  "ccxt>=4.4.0",
+
+  # Performance helpers used across the codebase
+  "polars>=1.18.0",
+  "orjson>=3.10.12",
+
+  # Logging
+  "structlog>=25.1.0",
+
+  # Cmdline tooling
+  "typer>=0.15.1",
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.8.4",
+  "mypy>=1.14.0",
+  "pytest>=8.3.4",
+  "pytest-asyncio>=0.25.0",
+  "pytest-cov>=6.0.0",
+  "httpx>=0.28.1", # for FastAPI test client
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+package = true
+
+# -----------------------------------------------------------------------------
+# Linters / type checkers
+# -----------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle
+  "W",    # pycodestyle
+  "F",    # pyflakes
+  "I",    # isort
+  "B",    # flake8-bugbear
+  "UP",   # pyupgrade
+  "SIM",  # simplify
+  "RUF",  # ruff-specific
+  "ASYNC",
+]
+ignore = [
+  "E501", # line length handled by formatter
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+disallow_untyped_decorators = false # FastAPI decorators
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
