@@ -1,3 +1,5 @@
+import Link from "next/link"
+
 import { LiveBtcChart } from "@/components/chart/LiveBtcChart"
 import { CopilotChat } from "@/components/chat/CopilotChat"
 
@@ -10,11 +12,19 @@ export default function Page() {
             trading-copilot
           </h1>
           <p className="text-xs text-muted-foreground">
-            Phase 1 — interpreter and orchestrator, never an oracle.
+            Phase 2 — chat-driven analysis + reproducible research.
           </p>
         </div>
-        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          Binance USDT-M · MAINNET-RO
+        <div className="flex items-center gap-4">
+          <Link
+            href="/research"
+            className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+          >
+            research →
+          </Link>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Binance USDT-M · MAINNET-RO
+          </span>
         </div>
       </header>
 

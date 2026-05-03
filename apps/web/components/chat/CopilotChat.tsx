@@ -23,11 +23,24 @@ import { DefaultChatTransport, type DynamicToolUIPart, type ToolUIPart } from "a
 import { BotIcon } from "lucide-react"
 import { useState } from "react"
 
+import { BacktestResultCard, type BacktestToolOutput } from "./BacktestResultCard"
 import { ReasoningPart } from "./parts/ReasoningPart"
 import { SourcesStrip, type SourceItem } from "./parts/SourcePart"
 import { TextPart } from "./parts/TextPart"
 import { ToolPart } from "./parts/ToolPart"
 import { TradeIdeaCard } from "./TradeIdeaCard"
+
+function isBacktestOutput(value: unknown): value is BacktestToolOutput {
+  if (!value || typeof value !== "object") return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.run_id === "string" &&
+    typeof v.strategy_id === "string" &&
+    typeof v.deflated_sharpe === "number" &&
+    typeof v.sharpe === "number" &&
+    typeof v.max_drawdown === "number"
+  )
+}
 
 interface CopilotChatProps {
   className?: string
@@ -129,6 +142,22 @@ export function CopilotChat({ className }: CopilotChatProps) {
                       rendered.push(
                         <TradeIdeaCard key={key} idea={toolPart.input} />,
                       )
+                    } else if (
+                      toolName === "run_backtest" &&
+                      toolPart.state === "output-available" &&
+                      isBacktestOutput(toolPart.output)
+                    ) {
+                      rendered.push(
+                        <BacktestResultCard
+                          key={key}
+                          output={toolPart.output}
+                          input={toolPart.input as { symbol?: string; timeframe?: string }}
+                        />,
+                      )
+                      sources.push({
+                        id: `tool-${toolPart.toolCallId ?? idx}`,
+                        title: "run backtest",
+                      })
                     } else {
                       rendered.push(<ToolPart key={key} part={toolPart} />)
                       sources.push({

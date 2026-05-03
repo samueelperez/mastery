@@ -6,8 +6,10 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.backtests import router as backtests_router
 from app.api.chat import router as chat_router
 from app.api.health import router as health_router
+from app.api.journal import router as journal_router
 from app.api.ohlcv import router as ohlcv_router
 from app.api.ws import router as ws_router
 from app.broadcasting.pubsub import close_client as close_valkey
@@ -61,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(ohlcv_router)
     app.include_router(ws_router)
     app.include_router(chat_router)
+    app.include_router(backtests_router)
+    app.include_router(journal_router)
     return app
 
 
