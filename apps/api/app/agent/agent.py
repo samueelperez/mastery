@@ -15,11 +15,15 @@ from app.agent.models import TradeIdea
 from app.agent.system_prompt import build_system_blocks
 from app.agent.tools.biases import register_bias_tool
 from app.agent.tools.confluence import register_confluence_tools
+from app.agent.tools.cpcv import register_cpcv_tool
 from app.agent.tools.indicators import register_indicator_tools
 from app.agent.tools.journal_query import register_journal_query_tool
 from app.agent.tools.log_trade import register_log_trade_tool
 from app.agent.tools.ohlcv import register_ohlcv_tools
+from app.agent.tools.run_backtest import register_run_backtest_tool
+from app.agent.tools.strategy_metrics import register_strategy_metrics_tool
 from app.agent.tools.structure import register_structure_tools
+from app.agent.tools.walk_forward import register_walk_forward_tool
 from app.agent.validators import register_validators
 from app.config import get_settings
 
@@ -64,6 +68,10 @@ def build_agent() -> Agent[AgentDeps, TradeIdea | str]:
     register_log_trade_tool(agent)
     register_journal_query_tool(agent)
     register_bias_tool(agent)
+    register_run_backtest_tool(agent)
+    register_walk_forward_tool(agent)
+    register_cpcv_tool(agent)
+    register_strategy_metrics_tool(agent)
     register_validators(agent)
     return agent
 

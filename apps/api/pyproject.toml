@@ -43,6 +43,15 @@ dependencies = [
 
   # Journal embeddings (F2): voyage-4-large via the official SDK.
   "voyageai>=0.3.4",
+
+  # Backtesting (F2 Chunk 2) — OSS-only stack. The decision NOT to buy
+  # VectorBT PRO is captured in the plan file: research speed isn't the
+  # bottleneck for our use case. skfolio gives us CombinatorialPurgedCV;
+  # DSR / PSR / PBO are implemented directly from Bailey & López de Prado
+  # (paper "The Deflated Sharpe Ratio" 2014, "PBO" 2016) in
+  # app/backtest/metrics.py — pypbo is a GitHub-only package that we'd have
+  # to vendor anyway, and the formulas are ~80 LoC of numpy.
+  "skfolio>=0.15.0",
 ]
 
 [dependency-groups]
@@ -114,6 +123,11 @@ ignore_missing_imports = true
 module = "redis.*"
 ignore_missing_imports = false
 disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+# skfolio + pandas don't ship usable stubs for our usage.
+module = ["skfolio.*", "pandas.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

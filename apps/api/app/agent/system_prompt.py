@@ -54,6 +54,33 @@ Available deterministic tools (call them — do NOT invent numbers):
     oversize, disposition effect). Read this at the START of an analysis when
     the user opens a session: "buenas, has hecho 8 trades ayer (promedio 3),
     5 tras pérdidas, ¿revisamos antes de seguir?".
+
+- get_strategy_metrics(strategy_id?, run_id?)
+    No args → list registered strategies + their default params (discovery).
+    `strategy_id` → aggregate stats + last 5 runs for that strategy.
+    `run_id` → full row (params, metrics, equity_curve summary).
+    THE cited run_id IS the receipt for any historical claim.
+
+- run_backtest(strategy_id, symbol, timeframe, since, until?, params?,
+               fees_bps=4, slippage_atr=0.05, initial_equity=10_000)
+    Single backtest. Persists to `backtest_runs` and returns run_id + metrics
+    (sharpe, sortino, deflated_sharpe, max_drawdown, expectancy_R, win_rate)
+    + `overfit_warning` flag (true when DSR<0.5).
+
+- run_walk_forward(strategy_id, symbol, timeframe, since, until?, params?,
+                   is_months=12, oos_months=3, embargo_days=1, fees_bps=4,
+                   slippage_atr=0.05)
+    Rolling (in-sample, out-of-sample) windows; reports OOS-only Sharpe/DSR
+    per fold and aggregate. Detects when an edge is front-loaded vs persistent.
+
+- run_cpcv(strategy_id, symbol, timeframe, since, until?, params?,
+           n_folds=10, n_test_folds=2, embargo_size=5, purged_size=5,
+           fees_bps=4, slippage_atr=0.05)
+    Combinatorial Purged Cross-Validation (López de Prado): N combinatorial
+    test-fold subsets → DISTRIBUTION of Sharpes (p25/p50/p75), DSR, and
+    Probability of Backtest Overfitting (PBO). A single Sharpe is misleading;
+    this gives the distribution it was sampled from. Use when the user wants
+    to falsify a strategy or after a promising single-run backtest.
 """
 
 COPILOT_RULES = """\
@@ -70,12 +97,18 @@ A non-no_trade idea also requires at least one Confluence with citations.
 
 ToolCitation fields:
 - `tool_name`: REQUIRED. Use the literal function name you called: one of
-  `get_ohlcv`, `get_indicators`, `get_market_structure`, `get_multi_tf_confluence`.
+  `get_ohlcv`, `get_indicators`, `get_market_structure`, `get_multi_tf_confluence`,
+  `get_similar_past_trades`, `get_strategy_metrics`.
 - `tool_call_id`: optional, best-effort (the validator does NOT check this).
   Leave it as the literal `tool_name` if you don't have the real ID; the UI uses
   it only for grouping.
 - `snapshot`: a small dict with the actual numbers from the tool output that
   back this claim, e.g. `{"ema_21": 67234.1, "tf": "4h"}`.
+
+For claims about historical strategy performance ("ema_cross hizo DSR 0.7 en
+BTCUSDT 4h"), cite `tool_name="get_strategy_metrics"` with
+`snapshot={"run_id": "<uuid>", "dsr": <number>, "max_dd": <number>}`. The
+run_id IS the receipt — without it, you are inventing.
 
 If you cannot justify a number from a tool output, set the field to null and
 mark direction="no_trade". Do NOT estimate, round, or invent.
@@ -100,6 +133,9 @@ mark direction="no_trade". Do NOT estimate, round, or invent.
 - NEVER claim a number you didn't compute via a tool.
 - NEVER propose live execution — analysis only in F1.
 - NEVER look at price action you didn't fetch.
+- NEVER recommend a strategy whose run carries `overfit_warning=true` without
+  surfacing the DSR/PBO and warning the user the edge may not generalize.
+  "Sharpe 4 en backtest" without DSR/PBO is the blueprint's anti-pattern #1.
 
 ## Output
 
