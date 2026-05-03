@@ -1,19 +1,25 @@
-import { Button } from "@/components/ui/button"
+import { LiveBtcChart } from "@/components/chart/LiveBtcChart"
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
+    <main className="flex min-h-svh flex-col gap-4 p-6">
+      <header className="flex items-baseline justify-between border-b border-border/40 pb-3">
         <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+          <h1 className="font-mono text-sm tracking-tight text-foreground">trading-copilot</h1>
+          <p className="text-xs text-muted-foreground">
+            Phase 0 — interpreter and orchestrator, never an oracle.
+          </p>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Binance USDT-M · MAINNET-RO
         </div>
-      </div>
-    </div>
+      </header>
+
+      <section className="grid h-[calc(100svh-9rem)] grid-cols-1 gap-4">
+        <div className="overflow-hidden rounded-lg border border-border/40 bg-card/40 p-3">
+          <LiveBtcChart symbol="BTCUSDT" timeframe="1h" className="h-[calc(100%-1.75rem)] w-full" />
+        </div>
+      </section>
+    </main>
   )
 }

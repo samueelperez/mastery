@@ -19,8 +19,10 @@ dependencies = [
   "asyncpg>=0.30.0",
   "alembic>=1.14.0",
 
-  # Cache + pub/sub. valkey-glide is the official Valkey client; falls back to redis-py wire protocol.
-  "valkey-glide>=2.1.0",
+  # Cache + pub/sub. We use redis-py against Valkey (100% wire-protocol compatible).
+  # valkey-glide is the AWS-native client but its async pub/sub API is heavier; redis-py
+  # is a drop-in for now. Re-evaluate in F3 if we hit pub/sub throughput limits.
+  "redis>=6.0.0",
 
   # Exchange data — CCXT 4.4+ ships CCXT Pro (WebSocket support) for free.
   "ccxt>=4.4.0",

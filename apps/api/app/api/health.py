@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from app.broadcasting.pubsub import ping as valkey_ping
 from app.db import session_scope
 
 router = APIRouter()
@@ -12,7 +13,7 @@ router = APIRouter()
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     db: Literal["ok", "fail"]
-    valkey: Literal["ok", "fail", "skip"]
+    valkey: Literal["ok", "fail"]
 
 
 @router.get("/health", response_model=HealthResponse, tags=["meta"])
@@ -25,12 +26,11 @@ async def health() -> HealthResponse:
     except Exception:
         db_ok = False
 
-    # Valkey check is best-effort; leave as 'skip' until we wire the client (F0.7).
-    valkey_status: Literal["ok", "fail", "skip"] = "skip"
+    valkey_ok = await valkey_ping()
 
-    overall: Literal["ok", "degraded"] = "ok" if db_ok else "degraded"
+    overall: Literal["ok", "degraded"] = "ok" if (db_ok and valkey_ok) else "degraded"
     return HealthResponse(
         status=overall,
         db="ok" if db_ok else "fail",
-        valkey=valkey_status,
+        valkey="ok" if valkey_ok else "fail",
     )
