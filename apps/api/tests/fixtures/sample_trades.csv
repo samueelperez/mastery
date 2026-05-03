@@ -1,0 +1,6 @@
+ts,symbol,timeframe,side,entry_px,exit_px,size,r_multiple,setup_tag,regime,mistakes
+2026-04-15T10:00:00+00:00,BTCUSDT,4h,long,73250,75100,0.1,1.85,breakout_4h,trending_up,Esperé confirmación pero entré tarde y dejé R/R subóptimo
+2026-04-18T08:00:00+00:00,BTCUSDT,4h,long,76200,75800,0.1,-0.4,reclaim_ema21,ranging,Forcé el long contra estructura mixta — no había confluencia
+2026-04-22T14:00:00+00:00,BTCUSDT,1h,short,79444,78200,0.05,1.24,double_top,trending_up,Short contra tendencia mayor pero el setup local era limpio
+2026-04-25T20:00:00+00:00,BTCUSDT,4h,long,77100,77100,0.08,0.0,bounce_support,ranging,Stop al breakeven tras rechazo en EMA200 — me cubrí por miedo
+2026-04-29T16:00:00+00:00,BTCUSDT,1h,long,74868,76300,0.12,2.1,oversold_bounce,trending_down,RSI en 25 + divergencia clara; mejor trade del mes

@@ -40,6 +40,9 @@ dependencies = [
   # LLM agent (F1+). pydantic-ai-slim with extras keeps the dep tree small;
   # we don't pull OpenAI/Gemini providers we won't use.
   "pydantic-ai-slim[openrouter,vercel-ai]>=1.89.0",
+
+  # Journal embeddings (F2): voyage-4-large via the official SDK.
+  "voyageai>=0.3.4",
 ]
 
 [dependency-groups]

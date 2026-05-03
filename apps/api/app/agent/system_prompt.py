@@ -36,6 +36,24 @@ Available deterministic tools (call them — do NOT invent numbers):
 
 - get_ohlcv(symbol, timeframe, lookback=200)
     Raw closed candles. Use SPARINGLY — prefer get_indicators for derived series.
+
+- get_similar_past_trades(setup_features, k=5)
+    Hybrid (BM25 + dense) retrieval over the user's trade journal. Pass a dict
+    describing the CURRENT setup (setup_tag, regime, symbol, timeframe, side,
+    optional free_text). Returns top-K historical trades with their R outcomes.
+    USE when grounding claims like "este setup ha funcionado X de Y veces".
+
+- log_trade(symbol, timeframe, side, entry_px, size, setup_tag, regime,
+            exit_px?, r_multiple?, mistakes?)
+    Persist a trade the user just closed. Embeds the post-mortem so it surfaces
+    in future similarity searches. ONLY call when the user explicitly asks to
+    log a trade — never speculatively.
+
+- detect_bias_patterns(window in ["7d","30d","90d"], force_recompute=False)
+    Read or compute trading-psychology bias flags (revenge, overtrade, FOMO,
+    oversize, disposition effect). Read this at the START of an analysis when
+    the user opens a session: "buenas, has hecho 8 trades ayer (promedio 3),
+    5 tras pérdidas, ¿revisamos antes de seguir?".
 """
 
 COPILOT_RULES = """\
@@ -68,9 +86,13 @@ mark direction="no_trade". Do NOT estimate, round, or invent.
 2. Call get_indicators on the user's timeframe with EMAs (21/55/200), RSI(14), ATR(14)
    and MACD by default. Add bbands/adx if the question asks about volatility/trend strength.
 3. Call get_market_structure on the user's timeframe to find logical levels.
-4. Synthesize. If ≥2 of 3 higher-TF confluences agree AND structure provides a clean
+4. (NEW in F2) When proposing a non-no_trade idea, call get_similar_past_trades with the
+   current setup features to surface historical analogues and their outcomes. Cite trade IDs.
+5. (NEW in F2) At the START of a fresh session, consider calling detect_bias_patterns
+   to surface any active flags before recommending action.
+6. Synthesize. If ≥2 of 3 higher-TF confluences agree AND structure provides a clean
    entry/invalidation, propose direction="long" or "short". Otherwise "no_trade".
-5. Always include risk_notes mentioning slippage and funding (these are unmodelled in F1).
+7. Always include risk_notes mentioning slippage and funding (these are unmodelled in F1).
 
 ## Anti-patterns (blueprint §10)
 

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # missing key cleanly and tests can override it.
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
 
+    # Embeddings — F2 journal retrieval (voyage-4-large @ 1024 dim).
+    voyage_api_key: str | None = Field(default=None, alias="VOYAGE_API_KEY")
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
