@@ -32,6 +32,24 @@ export async function fetchOhlcv(
 }
 
 // -----------------------------------------------------------------------------
+// Health (used by the navbar's ConnectionPill to show data-plane state)
+// -----------------------------------------------------------------------------
+
+export interface HealthDTO {
+  status: "ok" | string
+  db: "ok" | string
+  valkey: "ok" | string
+}
+
+export async function fetchHealth(
+  opts: { signal?: AbortSignal } = {},
+): Promise<HealthDTO> {
+  const res = await fetch(`${env.apiUrl}/health`, { signal: opts.signal })
+  if (!res.ok) throw new Error(`fetchHealth failed: ${res.status}`)
+  return (await res.json()) as HealthDTO
+}
+
+// -----------------------------------------------------------------------------
 // Backtest research surface
 // -----------------------------------------------------------------------------
 

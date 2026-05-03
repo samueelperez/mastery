@@ -1,6 +1,7 @@
 import { Inter, JetBrains_Mono } from "next/font/google"
 
 import "./globals.css"
+import { GlobalNav } from "@/components/nav/GlobalNav"
 import { Providers } from "@/components/providers"
 import { cn } from "@/lib/utils"
 
@@ -28,7 +29,10 @@ export default function RootLayout({
       className={cn("antialiased", sans.variable, mono.variable, "font-sans")}
     >
       <body className="bg-background text-foreground">
-        <Providers>{children}</Providers>
+        <Providers>
+          <GlobalNav />
+          {children}
+        </Providers>
       </body>
     </html>
   )
