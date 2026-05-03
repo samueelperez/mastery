@@ -64,9 +64,20 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
             {trades.map((t) => (
               <tr
                 key={t.id}
+                tabIndex={0}
+                role="button"
+                aria-pressed={selected?.id === t.id}
+                aria-label={`select ${t.symbol} ${t.timeframe} ${t.side} from ${shortDate(t.trade_ts)}`}
                 onClick={() => setSelected(t)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setSelected(t)
+                  }
+                }}
                 className={cn(
-                  "cursor-pointer hover:bg-accent/10",
+                  "cursor-pointer transition-colors duration-150 ease-out hover:bg-accent/10",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2",
                   selected?.id === t.id && "bg-accent/20",
                 )}
               >

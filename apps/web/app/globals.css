@@ -83,37 +83,41 @@
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* Trading copilot MASTER design system: gold + purple on slate.
+       Source values: #0F172A bg, #F59E0B primary (gold), #8B5CF6 accent (purple),
+       #EF4444 destructive, slate-700 borders. OKLCH equivalents from Tailwind v4. */
+    --background: oklch(0.208 0.042 265.755);          /* slate-900 #0F172A */
+    --foreground: oklch(0.984 0.003 247.858);          /* slate-50 */
+    --card: oklch(0.279 0.041 260.031);                /* slate-800 — elevated surface */
+    --card-foreground: oklch(0.984 0.003 247.858);
+    --popover: oklch(0.279 0.041 260.031);
+    --popover-foreground: oklch(0.984 0.003 247.858);
+    --primary: oklch(0.769 0.188 70.08);               /* gold #F59E0B — trust + price-up */
+    --primary-foreground: oklch(0.208 0.042 265.755);  /* slate-900 — dark text on gold */
+    --secondary: oklch(0.372 0.044 257.287);           /* slate-700 */
+    --secondary-foreground: oklch(0.984 0.003 247.858);
+    --muted: oklch(0.30 0.034 258);                    /* between slate-700/800 */
+    --muted-foreground: oklch(0.704 0.04 256.788);     /* slate-400 */
+    --accent: oklch(0.606 0.25 292.717);               /* purple #8B5CF6 — CTA */
+    --accent-foreground: oklch(0.984 0.003 247.858);
+    --destructive: oklch(0.637 0.237 25.331);          /* red #EF4444 — price-down */
+    --border: oklch(0.372 0.044 257.287);              /* slate-700 — solid, not transparent */
+    --input: oklch(0.372 0.044 257.287);
+    --ring: oklch(0.769 0.188 70.08);                  /* gold focus ring */
+    /* Chart palette: gold/purple primaries + emerald/red for explicit positive/negative. */
+    --chart-1: oklch(0.769 0.188 70.08);               /* gold */
+    --chart-2: oklch(0.606 0.25 292.717);              /* purple */
+    --chart-3: oklch(0.696 0.17 162.48);               /* emerald-500 — positive series */
+    --chart-4: oklch(0.637 0.237 25.331);              /* red — negative series */
+    --chart-5: oklch(0.704 0.04 256.788);              /* slate-400 — neutral */
+    --sidebar: oklch(0.279 0.041 260.031);
+    --sidebar-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-primary: oklch(0.769 0.188 70.08);
+    --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
+    --sidebar-accent: oklch(0.606 0.25 292.717);
+    --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+    --sidebar-border: oklch(0.372 0.044 257.287);
+    --sidebar-ring: oklch(0.769 0.188 70.08);
 }
 
 @layer base {

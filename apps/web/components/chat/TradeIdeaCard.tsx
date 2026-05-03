@@ -28,22 +28,31 @@ interface TradeIdeaCardProps {
   idea: TradeIdea
 }
 
+/* Semantic palette (matches /research surface):
+ *   primary (gold)   — long, bull, high-confidence, winning
+ *   accent (purple)  — medium-confidence, "consider"
+ *   destructive (red) — short, bear, losing
+ *   muted            — no_trade, range, low-confidence
+ */
 const directionTone: Record<Direction, { label: string; cls: string }> = {
-  long: { label: "LONG", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-  short: { label: "SHORT", cls: "bg-red-500/15 text-red-400 border-red-500/30" },
+  long: { label: "LONG", cls: "bg-primary/15 text-primary border-primary/30" },
+  short: {
+    label: "SHORT",
+    cls: "bg-destructive/15 text-destructive border-destructive/30",
+  },
   no_trade: { label: "NO TRADE", cls: "bg-muted text-muted-foreground" },
 }
 
 const biasTone: Record<Bias, string> = {
-  bull: "text-emerald-400",
-  bear: "text-red-400",
+  bull: "text-primary",
+  bear: "text-destructive",
   range: "text-muted-foreground",
 }
 
 const confidenceTone: Record<Confidence, string> = {
   low: "bg-muted text-muted-foreground",
-  medium: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
-  high: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+  medium: "bg-accent/15 text-accent border border-accent/40",
+  high: "bg-primary/15 text-primary border border-primary/30",
 }
 
 function CitationBadges({ citations }: { citations: ToolCitation[] }) {

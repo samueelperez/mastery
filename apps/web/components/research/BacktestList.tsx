@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { AlertTriangleIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,7 @@ interface BacktestListProps {
 }
 
 export function BacktestList({ runs, loading, error }: BacktestListProps) {
+  const router = useRouter()
   if (loading && runs.length === 0) {
     return (
       <div className="flex flex-col gap-2">
@@ -60,48 +61,56 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border/30">
-          {runs.map((r) => (
-            <tr
-              key={r.id}
-              className="group hover:bg-accent/10"
-            >
-              <Td>
-                <Link
-                  href={`/research/backtests/${r.id}`}
-                  className="font-mono text-foreground group-hover:text-primary"
-                >
-                  {r.strategy_id}
-                </Link>
-              </Td>
-              <Td>{r.symbol}</Td>
-              <Td>{r.timeframe}</Td>
-              <Td align="right" mono>
-                {fmt(r.metrics?.sharpe)}
-              </Td>
-              <Td align="right" mono>
-                {fmt(r.metrics?.deflated_sharpe)}
-              </Td>
-              <Td align="right" mono>
-                {pct(r.metrics?.max_drawdown)}
-              </Td>
-              <Td align="right" mono>
-                {r.metrics?.n_trades ?? "—"}
-              </Td>
-              <Td align="right" mono>
-                {short(r.created_at)}
-              </Td>
-              <Td>
-                {r.metrics?.overfit_warning ? (
-                  <Badge variant="destructive" className="gap-1">
-                    <AlertTriangleIcon className="size-3" />
-                    overfit
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">ok</Badge>
-                )}
-              </Td>
-            </tr>
-          ))}
+          {runs.map((r) => {
+            const navigate = () => router.push(`/research/backtests/${r.id}`)
+            return (
+              <tr
+                key={r.id}
+                tabIndex={0}
+                role="link"
+                aria-label={`open ${r.strategy_id} ${r.symbol} ${r.timeframe} backtest`}
+                onClick={navigate}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    navigate()
+                  }
+                }}
+                className="cursor-pointer transition-colors duration-150 ease-out hover:bg-accent/10 hover:text-primary focus-visible:bg-accent/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2"
+              >
+                <Td>
+                  <span className="font-mono text-foreground">{r.strategy_id}</span>
+                </Td>
+                <Td>{r.symbol}</Td>
+                <Td>{r.timeframe}</Td>
+                <Td align="right" mono>
+                  {fmt(r.metrics?.sharpe)}
+                </Td>
+                <Td align="right" mono>
+                  {fmt(r.metrics?.deflated_sharpe)}
+                </Td>
+                <Td align="right" mono>
+                  {pct(r.metrics?.max_drawdown)}
+                </Td>
+                <Td align="right" mono>
+                  {r.metrics?.n_trades ?? "—"}
+                </Td>
+                <Td align="right" mono>
+                  {short(r.created_at)}
+                </Td>
+                <Td>
+                  {r.metrics?.overfit_warning ? (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertTriangleIcon className="size-3" />
+                      overfit
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">ok</Badge>
+                  )}
+                </Td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
