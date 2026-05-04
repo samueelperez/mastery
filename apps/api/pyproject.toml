@@ -129,6 +129,11 @@ disallow_untyped_calls = false
 module = ["skfolio.*", "pandas.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# asyncpg (raw connection used for LISTEN/NOTIFY in alerts.runtime).
+module = "asyncpg.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

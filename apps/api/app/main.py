@@ -6,6 +6,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.alerts.runtime import AlertsRuntime
 from app.api.alerts import router as alerts_router
 from app.api.backtests import router as backtests_router
 from app.api.chat import router as chat_router
@@ -33,12 +34,15 @@ log = structlog.get_logger()
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_engine()
     ingestion = LiveIngestion()
+    alerts = AlertsRuntime()
     await ingestion.start()
+    await alerts.start()
     log.info("api.start")
     try:
         yield
     finally:
         log.info("api.stop")
+        await alerts.stop()
         await ingestion.stop()
         await close_valkey()
         await dispose_engine()
