@@ -83,7 +83,7 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
           href={`/research/backtests/${o.run_id}`}
           className="group flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
         >
-          full metrics + equity curve
+          ver métricas completas + equity curve
           <ArrowUpRightIcon className="size-3 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </CardContent>

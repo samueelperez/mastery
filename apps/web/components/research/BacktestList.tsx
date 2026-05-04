@@ -31,7 +31,7 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
     return (
       <Card className="border-dashed border-border bg-card/20 p-6 text-center">
         <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          no backtests yet
+          aún no hay backtests
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Pídele al copiloto:{" "}
@@ -48,15 +48,15 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
       <table className="w-full min-w-[40rem] text-xs">
         <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
           <tr>
-            <Th>strategy</Th>
-            <Th>symbol</Th>
+            <Th>estrategia</Th>
+            <Th>símbolo</Th>
             <Th>tf</Th>
             <Th align="right">sharpe</Th>
             <Th align="right">DSR</Th>
             <Th align="right">max DD</Th>
             <Th align="right">trades</Th>
-            <Th align="right">created</Th>
-            <Th>flags</Th>
+            <Th align="right">creado</Th>
+            <Th>estado</Th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/30">

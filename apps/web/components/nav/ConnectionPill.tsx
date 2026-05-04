@@ -43,12 +43,12 @@ export function ConnectionPill() {
   }[tone]
 
   const title = {
-    loading: "checking data plane…",
-    ok: "data plane healthy: db + valkey + openrouter + voyage all set",
+    loading: "verificando data plane…",
+    ok: "data plane saludable: db + valkey + openrouter + voyage configurados",
     partial: data
-      ? `degraded: db=${data.db} valkey=${data.valkey} openrouter=${data.openrouter} voyage=${data.voyage}`
-      : "degraded",
-    down: "api unreachable",
+      ? `degradado: db=${data.db} valkey=${data.valkey} openrouter=${data.openrouter} voyage=${data.voyage}`
+      : "degradado",
+    down: "api inaccesible",
   }[tone]
 
   return (
@@ -58,7 +58,7 @@ export function ConnectionPill() {
     >
       <span className={cn("size-1.5 rounded-full", dotClass)} aria-hidden />
       <span className="hidden sm:inline">Binance USDT-M · MAINNET-RO</span>
-      <span className="sm:hidden">live</span>
+      <span className="sm:hidden">en vivo</span>
     </span>
   )
 }

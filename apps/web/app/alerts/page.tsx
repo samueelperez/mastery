@@ -10,18 +10,19 @@ export default function AlertsPage() {
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="font-mono text-sm uppercase tracking-widest text-foreground">
-            alerts
+            alertas
           </h1>
           <p className="text-xs text-muted-foreground">
-            Rules fire when a candle closes meeting your conditions; events
-            stream live to the bell. Create new ones from the{" "}
+            Las reglas disparan cuando una vela cierra cumpliendo tus condiciones;
+            los eventos llegan en vivo a la campana. Crea nuevas desde el{" "}
             <Link
               href="/"
               className="text-foreground underline-offset-2 hover:underline"
             >
               chat
             </Link>{" "}
-            (e.g. &ldquo;alértame cuando BTCUSDT 4h cierre con RSI(14)&le;30&rdquo;).
+            (ej.{" "}
+            &ldquo;alértame cuando BTCUSDT 4h cierre con RSI(14)&le;30&rdquo;).
           </p>
         </div>
         <AlertList />

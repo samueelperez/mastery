@@ -41,7 +41,7 @@ export function MetricsCard({ metrics: m }: MetricsCardProps) {
           ) : (
             <Badge variant="secondary" className="gap-1">
               <CheckIcon className="size-3" />
-              passes DSR/DD gates
+              pasa filtros DSR/DD
             </Badge>
           )}
         </div>
@@ -53,7 +53,7 @@ export function MetricsCard({ metrics: m }: MetricsCardProps) {
             value={m.sortino === null ? "—" : m.sortino.toFixed(2)}
             title={
               m.sortino === null
-                ? "Undefined: no losing returns in the equity curve."
+                ? "Indefinido: no hay returns perdedores en la equity curve."
                 : undefined
             }
           />
@@ -65,7 +65,7 @@ export function MetricsCard({ metrics: m }: MetricsCardProps) {
                 ? m.probability_of_overfit.toFixed(2)
                 : "—"
             }
-            title="Experimental: current CPCV runs the strategy once and ranks fold sub-samples; this is a proxy for true López de Prado PBO. Don't trust the absolute value yet."
+            title="Experimental: el CPCV actual ejecuta la estrategia una vez y rankea sub-muestras de folds; es un proxy del PBO real de López de Prado. No confíes aún en el valor absoluto."
           />
           <Stat
             label="max DD"

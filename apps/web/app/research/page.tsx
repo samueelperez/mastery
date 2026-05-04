@@ -33,17 +33,17 @@ export default function ResearchOverviewPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-mono text-sm uppercase tracking-widest text-foreground">
-              recent backtests
+              backtests recientes
             </h2>
             <p className="text-xs text-muted-foreground">
-              Latest runs across all strategies.
+              Últimas ejecuciones de todas las estrategias.
             </p>
           </div>
           <Link
             href="/research/backtests"
             className="font-mono text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
           >
-            view all →
+            ver todos →
           </Link>
         </div>
         <BacktestList
@@ -89,7 +89,8 @@ function computeHero(
   if (bestDsr === null && closed.length === 0) {
     return {
       headline: "—",
-      caption: "no data yet · run a backtest or import the journal to populate.",
+      caption:
+        "sin datos aún · ejecuta un backtest o importa el diario para empezar.",
       tone: "neutral",
       rightPrimary: `${runs.length} runs`,
       rightSecondary: `${trades.length} trades`,
@@ -98,18 +99,18 @@ function computeHero(
   if (bestDsr !== null) {
     return {
       headline: bestDsr.toFixed(2),
-      caption: `best DSR across ${runs.length} run${runs.length === 1 ? "" : "s"}; ${passing} pass DSR≥0.5 + no overfit gate.`,
+      caption: `mejor DSR en ${runs.length} run${runs.length === 1 ? "" : "s"}; ${passing} pasan DSR≥0.5 + sin overfit.`,
       tone: bestDsr >= 0.95 ? "good" : bestDsr >= 0.5 ? "neutral" : "bad",
-      rightPrimary: `${closed.length} trades closed`,
-      rightSecondary: `${(wr * 100).toFixed(0)}% WR · ${wins}W ${losses}L`,
+      rightPrimary: `${closed.length} trades cerrados`,
+      rightSecondary: `${(wr * 100).toFixed(0)}% WR · ${wins}G ${losses}P`,
     }
   }
   return {
     headline: `${(wr * 100).toFixed(0)}%`,
-    caption: `journal win-rate · ${closed.length} closed trade${closed.length === 1 ? "" : "s"}.`,
+    caption: `win-rate del diario · ${closed.length} trade${closed.length === 1 ? "" : "s"} cerrado${closed.length === 1 ? "" : "s"}.`,
     tone: wr >= 0.5 ? "good" : "bad",
     rightPrimary: `${runs.length} backtests`,
-    rightSecondary: "pending DSR data",
+    rightSecondary: "DSR pendiente",
   }
 }
 
@@ -119,7 +120,7 @@ function Hero({ stat, loading }: { stat: HeroStat; loading: boolean }) {
       <CardContent className="flex flex-col gap-6 py-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            edge so far
+            edge hasta ahora
           </span>
           <span
             className={cn(

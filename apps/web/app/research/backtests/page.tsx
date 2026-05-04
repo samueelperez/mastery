@@ -15,10 +15,10 @@ export default function BacktestsListPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-mono text-sm uppercase tracking-widest text-foreground">
-          all backtests
+          todos los backtests
         </h2>
         <p className="text-xs text-muted-foreground">
-          {data?.length ?? 0} runs · ordered by created_at desc.
+          {data?.length ?? 0} runs · ordenados por created_at desc.
         </p>
       </div>
       <BacktestList

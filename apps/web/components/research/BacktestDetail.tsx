@@ -45,14 +45,14 @@ export function BacktestDetail({ run }: BacktestDetailProps) {
         </Card>
       ) : (
         <p className="font-mono text-xs text-muted-foreground">
-          (no equity curve persisted for this run)
+          (no se persistió equity curve para este run)
         </p>
       )}
 
       <Card className="border-border bg-card">
         <CardContent className="pt-6">
           <h3 className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-            params
+            parámetros
           </h3>
           <pre className="overflow-x-auto rounded-md bg-background p-3 font-mono text-xs text-foreground">
             {JSON.stringify(run.params, null, 2)}

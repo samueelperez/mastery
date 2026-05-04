@@ -19,8 +19,8 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { href: "/", label: "chat", icon: MessageSquareIcon, exact: true },
-  { href: "/research", label: "research", icon: FlaskConicalIcon },
-  { href: "/alerts", label: "alerts", icon: BellRingIcon },
+  { href: "/research", label: "investigación", icon: FlaskConicalIcon },
+  { href: "/alerts", label: "alertas", icon: BellRingIcon },
 ]
 
 export function GlobalNav() {
@@ -35,7 +35,7 @@ export function GlobalNav() {
       >
         trading-copilot
       </Link>
-      <nav className="flex items-center gap-1" aria-label="primary">
+      <nav className="flex items-center gap-1" aria-label="navegación principal">
         {ITEMS.map(({ href, label, icon: Icon, exact }) => {
           const active = exact ? pathname === href : pathname.startsWith(href)
           return (

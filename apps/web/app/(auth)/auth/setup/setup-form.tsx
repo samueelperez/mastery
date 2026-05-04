@@ -45,12 +45,12 @@ export function SetupForm() {
   return (
     <div className={cn(CARD_BASE, CARD_ENTER)}>
       <div className="mb-6 flex flex-col items-center">
-        <BrandWordmark caption="first-user setup" />
+        <BrandWordmark caption="configuración inicial" />
       </div>
 
       <p className="mb-6 text-center text-xs leading-relaxed text-muted-foreground">
-        One-shot bootstrap. After this account is created, /auth/setup is gone
-        and the system is single-user with you as the owner.
+        Inicialización única. Tras crear esta cuenta, /auth/setup desaparece y
+        el sistema queda como single-user contigo como owner.
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">

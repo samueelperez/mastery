@@ -25,11 +25,11 @@ export default function BacktestDetailPage() {
         href="/research/backtests"
         className="font-mono text-xs text-muted-foreground hover:text-foreground"
       >
-        ← all backtests
+        ← todos los backtests
       </Link>
       {isLoading && (
         <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-          <Spinner /> loading run…
+          <Spinner /> cargando run…
         </div>
       )}
       {error && !error.message.includes("404") && (

@@ -1,8 +1,8 @@
 import { ResearchSubnav } from "@/components/nav/ResearchSubnav"
 
 export const metadata = {
-  title: "Research · Trading Copilot",
-  description: "Backtests, journal, and bias detection.",
+  title: "Investigación · Trading Copilot",
+  description: "Backtests, diario y detección de sesgos.",
 }
 
 export default function ResearchLayout({

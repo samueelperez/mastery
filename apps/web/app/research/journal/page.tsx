@@ -15,10 +15,10 @@ export default function JournalPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-mono text-sm uppercase tracking-widest text-foreground">
-          journal
+          diario
         </h2>
         <p className="text-xs text-muted-foreground">
-          {data?.length ?? 0} trades · embedded with voyage-4-large for similarity search.
+          {data?.length ?? 0} trades · embedded con voyage-4-large para búsqueda por similitud.
         </p>
       </div>
       <JournalList

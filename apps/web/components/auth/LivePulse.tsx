@@ -51,10 +51,10 @@ export function LivePulse() {
       </span>
       <span aria-hidden>·</span>
       <span className="tabular-nums">
-        {ts ? `last bar ${formatTimeAgo(ts)}` : "syncing"}
+        {ts ? `última vela ${formatTimeAgo(ts)}` : "sincronizando"}
       </span>
       <span aria-hidden>·</span>
-      <span>14 tools</span>
+      <span>14 herramientas</span>
       <span aria-hidden>·</span>
       <span>88 tests</span>
     </div>

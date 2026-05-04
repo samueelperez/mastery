@@ -31,7 +31,7 @@ export function AlertCreatedCard({ output: o }: AlertCreatedCardProps) {
         <div className="flex items-baseline justify-between gap-3">
           <span className="flex items-center gap-2 font-mono text-sm tracking-tight text-foreground">
             <BellIcon className="size-3.5 text-primary" aria-hidden />
-            alert created
+            alerta creada
           </span>
           <Badge variant="secondary" className="font-mono text-[10px]">
             cooldown {o.cooldown_s}s
@@ -45,13 +45,13 @@ export function AlertCreatedCard({ output: o }: AlertCreatedCardProps) {
       <CardContent className="space-y-3 pb-4">
         <div>
           <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            name
+            nombre
           </p>
           <p className="font-mono text-sm text-foreground">{o.name}</p>
         </div>
         <div>
           <p className="mb-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            condition ({o.spec.logic})
+            condición ({o.spec.logic})
           </p>
           <p className="font-mono text-xs text-muted-foreground">
             {summarizeAlertConditions(o.spec.conditions, o.spec.logic)}
@@ -61,7 +61,7 @@ export function AlertCreatedCard({ output: o }: AlertCreatedCardProps) {
           href="/alerts"
           className="group flex items-center gap-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
         >
-          manage alerts
+          gestionar alertas
           <ArrowUpRightIcon className="size-3 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </CardContent>

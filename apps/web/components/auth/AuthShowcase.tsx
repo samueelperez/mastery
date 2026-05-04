@@ -25,18 +25,18 @@ export function AuthShowcase({ className }: { className?: string }) {
           trading-copilot
         </h1>
         <p className="max-w-md font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          interpreter and orchestrator · never an oracle
+          intérprete y orquestador · nunca un oráculo
         </p>
       </header>
 
       {/* Live chart panel — fills the available vertical space */}
       <section
-        aria-label="Live BTCUSDT chart"
+        aria-label="Gráfico BTCUSDT en vivo"
         className="flex min-h-0 flex-1 flex-col gap-2 rounded-xl border border-border/60 bg-card/40 p-3"
       >
         <div className="flex items-center justify-between px-1 pt-0.5">
           <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            BTCUSDT · 1h · live
+            BTCUSDT · 1h · en vivo
           </span>
           <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             <span
@@ -60,35 +60,35 @@ export function AuthShowcase({ className }: { className?: string }) {
       {/* Mission strip */}
       <footer className="flex flex-col gap-2 border-t border-border/40 pt-5">
         <p className="font-mono text-[11px] uppercase tracking-widest text-primary">
-          what&apos;s behind the door
+          qué hay detrás de la puerta
         </p>
         <ul className="grid grid-cols-1 gap-2 text-sm leading-relaxed text-muted-foreground sm:grid-cols-2">
           <li className="flex gap-2">
             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <span>
-              <span className="font-mono text-foreground">14 deterministic tools</span>
-              {" "}— every claim cites the call that produced it.
+              <span className="font-mono text-foreground">14 herramientas deterministas</span>
+              {" "}— cada cifra cita la llamada que la produjo.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <span>
               <span className="font-mono text-foreground">DSR + walk-forward + CPCV</span>
-              {" "}before any strategy gets to paper.
+              {" "}antes de que una estrategia llegue a paper.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <span>
-              <span className="font-mono text-foreground">Journal embeddings</span>
-              {" "}— past trades retrieved by setup similarity.
+              <span className="font-mono text-foreground">Diario con embeddings</span>
+              {" "}— trades pasados recuperados por similitud de setup.
             </span>
           </li>
           <li className="flex gap-2">
             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <span>
-              <span className="font-mono text-foreground">Bias detector</span>
-              {" "}+ alerts that fire on candle close, not earlier.
+              <span className="font-mono text-foreground">Detector de sesgos</span>
+              {" "}+ alertas que disparan al cierre de vela, no antes.
             </span>
           </li>
         </ul>

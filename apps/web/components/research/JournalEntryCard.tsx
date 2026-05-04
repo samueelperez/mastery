@@ -37,7 +37,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
             }
           >
             {trade.r_multiple === null
-              ? "open"
+              ? "abierto"
               : `${trade.r_multiple > 0 ? "+" : ""}${trade.r_multiple.toFixed(2)}R`}
           </Badge>
         </div>
@@ -47,17 +47,17 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
       </CardHeader>
       <CardContent className="space-y-4 pb-6">
         <div className="grid grid-cols-3 gap-3 text-xs">
-          <Stat label="entry" value={`$${trade.entry_px.toFixed(2)}`} />
+          <Stat label="entrada" value={`$${trade.entry_px.toFixed(2)}`} />
           <Stat
-            label="exit"
+            label="salida"
             value={trade.exit_px === null ? "—" : `$${trade.exit_px.toFixed(2)}`}
           />
-          <Stat label="size" value={trade.size.toString()} />
+          <Stat label="tamaño" value={trade.size.toString()} />
         </div>
 
         <div>
           <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            regime
+            régimen
           </p>
           <p className="font-mono text-xs text-foreground">{trade.regime}</p>
         </div>
@@ -78,7 +78,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
 
         {isLoading && (
           <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-            <Spinner /> loading details…
+            <Spinner /> cargando detalles…
           </div>
         )}
         {data && (
@@ -86,7 +86,7 @@ export function JournalEntryCard({ trade }: JournalEntryCardProps) {
             <Separator />
             <div>
               <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                embedded text · v{data.embedding_version}
+                texto embebido · v{data.embedding_version}
               </p>
               <pre className="overflow-x-auto rounded-md bg-background p-2 font-mono text-[11px] text-muted-foreground">
                 {data.summary_text}

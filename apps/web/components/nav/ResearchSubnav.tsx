@@ -12,9 +12,9 @@ interface SubnavItem {
 }
 
 const ITEMS: SubnavItem[] = [
-  { href: "/research", label: "overview", exact: true },
+  { href: "/research", label: "resumen", exact: true },
   { href: "/research/backtests", label: "backtests" },
-  { href: "/research/journal", label: "journal" },
+  { href: "/research/journal", label: "diario" },
 ]
 
 /** Sub-nav rendered under the global nav, only on /research/* routes. */
@@ -23,7 +23,7 @@ export function ResearchSubnav() {
   return (
     <div className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur">
       <nav
-        aria-label="research sections"
+        aria-label="secciones de investigación"
         className="-mx-1 flex items-center gap-1 overflow-x-auto px-4 py-1.5 sm:px-6"
       >
         {ITEMS.map(({ href, label, exact }) => {

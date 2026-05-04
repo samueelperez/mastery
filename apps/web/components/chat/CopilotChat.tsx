@@ -171,7 +171,7 @@ export function CopilotChat({ className }: CopilotChatProps) {
                       )
                       sources.push({
                         id: `tool-${toolPart.toolCallId ?? idx}`,
-                        title: "run backtest",
+                        title: "ejecutar backtest",
                       })
                     } else if (
                       toolName === "create_alert" &&
@@ -183,7 +183,7 @@ export function CopilotChat({ className }: CopilotChatProps) {
                       )
                       sources.push({
                         id: `tool-${toolPart.toolCallId ?? idx}`,
-                        title: "create alert",
+                        title: "crear alerta",
                       })
                     } else {
                       rendered.push(<ToolPart key={key} part={toolPart} />)

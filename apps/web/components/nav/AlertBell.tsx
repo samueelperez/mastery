@@ -43,8 +43,8 @@ export function AlertBell() {
           type="button"
           aria-label={
             unreadCount > 0
-              ? `${unreadCount} unread alert${unreadCount === 1 ? "" : "s"}`
-              : "alerts"
+              ? `${unreadCount} alerta${unreadCount === 1 ? "" : "s"} sin leer`
+              : "alertas"
           }
           className={cn(
             "relative flex size-8 items-center justify-center rounded-md transition-colors duration-150",

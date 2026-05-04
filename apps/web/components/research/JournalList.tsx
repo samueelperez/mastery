@@ -35,7 +35,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
     return (
       <Card className="border-dashed border-border bg-card/20 p-6 text-center">
         <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          no trades logged yet
+          aún no hay trades registrados
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Importa con <span className="font-mono text-foreground">scripts/import_journal.py</span> o
@@ -51,13 +51,13 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
         <table className="w-full min-w-[34rem] text-xs">
           <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
             <tr>
-              <Th>date</Th>
-              <Th>symbol</Th>
-              <Th>side</Th>
+              <Th>fecha</Th>
+              <Th>símbolo</Th>
+              <Th>lado</Th>
               <Th align="right">R</Th>
               <Th>setup</Th>
-              <Th>regime</Th>
-              <Th>mode</Th>
+              <Th>régimen</Th>
+              <Th>modo</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/30">
@@ -77,7 +77,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
                     type="button"
                     onClick={() => setSelected(t)}
                     aria-pressed={selected?.id === t.id}
-                    aria-label={`select ${t.symbol} ${t.timeframe} ${t.side} from ${shortDate(t.trade_ts)}`}
+                    aria-label={`seleccionar ${t.symbol} ${t.timeframe} ${t.side} del ${shortDate(t.trade_ts)}`}
                     className="font-mono after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                   >
                     {shortDate(t.trade_ts)}
@@ -111,7 +111,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
                   }
                 >
                   {t.r_multiple === null
-                    ? "open"
+                    ? "abierto"
                     : `${t.r_multiple > 0 ? "+" : ""}${t.r_multiple.toFixed(2)}R`}
                 </Td>
                 <Td>{t.setup_tag}</Td>
@@ -130,7 +130,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
         ) : (
           <Card className="border-dashed border-border bg-card/20 p-6 text-center">
             <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-              click a trade to inspect
+              haz click en un trade para inspeccionarlo
             </p>
           </Card>
         )}

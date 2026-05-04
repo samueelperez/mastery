@@ -14,7 +14,7 @@ const mono = JetBrains_Mono({
 
 export const metadata = {
   title: "Trading Copilot",
-  description: "Crypto trading copilot — interpreter and orchestrator, never an oracle.",
+  description: "Copilot de trading cripto — intérprete y orquestador, nunca un oráculo.",
 }
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       suppressHydrationWarning
       className={cn("antialiased", sans.variable, mono.variable, "font-sans")}
     >

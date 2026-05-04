@@ -39,7 +39,7 @@ export function AlertList() {
     return (
       <Card className="border-dashed border-border bg-card/20 p-6 text-center">
         <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          no alerts yet
+          aún no hay alertas
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           Pídele al copiloto:{" "}
@@ -56,12 +56,12 @@ export function AlertList() {
       <table className="w-full min-w-[40rem] text-xs">
         <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
           <tr>
-            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">name</th>
-            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">symbol</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">nombre</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">símbolo</th>
             <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">tf</th>
-            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">condition</th>
-            <th className="px-3 py-2 pointer-coarse:py-4 text-right font-medium">last fired</th>
-            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">status</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">condición</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-right font-medium">último disparo</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">estado</th>
             <th className="px-3 py-2 pointer-coarse:py-4 text-right font-medium" />
           </tr>
         </thead>
@@ -89,12 +89,12 @@ export function AlertList() {
                 {r.enabled ? (
                   <Badge variant="secondary" className="gap-1">
                     <CheckIcon className="size-3" />
-                    enabled
+                    activa
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="gap-1 text-muted-foreground">
                     <MinusIcon className="size-3" />
-                    disabled
+                    inactiva
                   </Badge>
                 )}
               </td>
@@ -103,7 +103,7 @@ export function AlertList() {
                   type="button"
                   onClick={() => toggle.mutate(r)}
                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent/20 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
-                  aria-label={r.enabled ? "disable alert" : "enable alert"}
+                  aria-label={r.enabled ? "desactivar alerta" : "activar alerta"}
                 >
                   <PowerIcon className="size-3.5" />
                 </button>

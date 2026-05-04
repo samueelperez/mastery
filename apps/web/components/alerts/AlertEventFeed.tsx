@@ -67,14 +67,14 @@ export function AlertEventFeed({ liveEvents, onClose }: AlertEventFeedProps) {
     <div className="flex w-80 max-w-[90vw] flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          alerts
+          alertas
         </span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
             className="rounded text-muted-foreground hover:text-foreground"
-            aria-label="close"
+            aria-label="cerrar"
           >
             ×
           </button>
@@ -83,16 +83,16 @@ export function AlertEventFeed({ liveEvents, onClose }: AlertEventFeedProps) {
       <ScrollArea className="max-h-96">
         {isLoading && merged.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            loading…
+            cargando…
           </p>
         ) : merged.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-3 py-8 text-center">
             <BellIcon className="size-5 text-muted-foreground" aria-hidden />
             <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              all clear
+              todo en orden
             </p>
             <p className="text-xs text-muted-foreground">
-              no events yet — alerts you create fire here
+              aún no hay eventos — las alertas que crees disparan aquí
             </p>
           </div>
         ) : (
@@ -128,7 +128,7 @@ export function AlertEventFeed({ liveEvents, onClose }: AlertEventFeedProps) {
                         variant="outline"
                         className={cn("text-[10px]", severityClass(ev.severity))}
                       >
-                        {ev.kind === "rule_match" ? "rule" : "bias"} ·{" "}
+                        {ev.kind === "rule_match" ? "regla" : "sesgo"} ·{" "}
                         {ev.severity}
                       </Badge>
                     </span>
@@ -139,7 +139,7 @@ export function AlertEventFeed({ liveEvents, onClose }: AlertEventFeedProps) {
                         className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
                       >
                         <CheckIcon className="size-3" aria-hidden />
-                        mark read
+                        marcar leído
                       </button>
                     )}
                   </div>

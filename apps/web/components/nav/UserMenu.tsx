@@ -65,7 +65,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Account menu for ${name ?? email}`}
+          aria-label={`Menú de cuenta de ${name ?? email}`}
           className={cn(
             "flex size-8 items-center justify-center rounded-full",
             "bg-accent/30 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground",
@@ -103,11 +103,11 @@ export function UserMenu() {
           aria-disabled
         >
           <UserIcon className="size-3.5" aria-hidden />
-          profile (soon)
+          perfil (próximamente)
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleSignOut} className="font-mono text-xs">
           <LogOutIcon className="size-3.5" aria-hidden />
-          sign out
+          cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

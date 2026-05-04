@@ -101,7 +101,7 @@ function LoginForm() {
           </button>
 
           <div className="mb-6 flex flex-col items-center">
-            <BrandWordmark caption="email + password" />
+            <BrandWordmark caption="correo + contraseña" />
           </div>
 
           <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
@@ -181,7 +181,7 @@ function LoginForm() {
     <>
       <div className={cn(CARD_BASE, CARD_ENTER)}>
         <div className="mb-6 flex flex-col items-center">
-          <BrandWordmark caption="secure session" />
+          <BrandWordmark caption="sesión segura" />
         </div>
 
         <div className="flex flex-col gap-2.5">
@@ -214,7 +214,7 @@ function LoginForm() {
         </div>
 
         <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          interpreter and orchestrator · never an oracle
+          intérprete y orquestador · nunca un oráculo
         </p>
       </div>
 

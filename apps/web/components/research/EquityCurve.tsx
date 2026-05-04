@@ -29,7 +29,7 @@ export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline gap-2">
         <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          equity curve
+          curva de equity
         </span>
         <span
           className={`font-mono text-sm tabular-nums ${ret >= 0 ? "text-primary" : "text-destructive"}`}
@@ -72,7 +72,7 @@ export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
                 fontSize: "11px",
               }}
               labelFormatter={(label) => fmtDate(label as string | number)}
-              formatter={(value) => [`$${Number(value).toFixed(2)}`, "equity"]}
+              formatter={(value) => [`$${Number(value).toFixed(2)}`, "equity"]} /* technical name kept */
             />
             <ReferenceLine
               y={initialEquity}
@@ -80,7 +80,7 @@ export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
               strokeDasharray="3 3"
               strokeOpacity={0.5}
               label={{
-                value: "initial",
+                value: "inicial",
                 position: "right",
                 fill: "var(--color-muted-foreground)",
                 fontSize: 10,
