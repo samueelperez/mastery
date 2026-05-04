@@ -12,7 +12,7 @@ interface BacktestToolOutput {
   strategy_id: string
   n_trades: number
   sharpe: number
-  sortino: number
+  sortino: number | null
   deflated_sharpe: number
   probabilistic_sharpe: number
   max_drawdown: number

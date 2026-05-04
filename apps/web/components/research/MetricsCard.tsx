@@ -48,15 +48,24 @@ export function MetricsCard({ metrics: m }: MetricsCardProps) {
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="sharpe" value={m.sharpe.toFixed(2)} />
-          <Stat label="sortino" value={m.sortino.toFixed(2)} />
+          <Stat
+            label="sortino"
+            value={m.sortino === null ? "—" : m.sortino.toFixed(2)}
+            title={
+              m.sortino === null
+                ? "Undefined: no losing returns in the equity curve."
+                : undefined
+            }
+          />
           <Stat label="PSR" value={m.probabilistic_sharpe.toFixed(2)} />
           <Stat
-            label="PBO"
+            label="PBO (exp.)"
             value={
               m.probability_of_overfit !== null
                 ? m.probability_of_overfit.toFixed(2)
                 : "—"
             }
+            title="Experimental: current CPCV runs the strategy once and ranks fold sub-samples; this is a proxy for true López de Prado PBO. Don't trust the absolute value yet."
           />
           <Stat
             label="max DD"
@@ -84,13 +93,15 @@ function Stat({
   label,
   value,
   danger,
+  title,
 }: {
   label: string
   value: string
   danger?: boolean
+  title?: string
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5" title={title}>
       <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
         {label}
       </span>

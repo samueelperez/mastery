@@ -43,20 +43,31 @@ export function CandleChart({ initial, live, className }: CandleChartProps) {
   useEffect(() => {
     if (!containerRef.current) return
 
+    // Pull live token values from the document so the chart matches whatever
+    // globals.css (.dark) defines. Falls back to slate-ish defaults if a var
+    // is missing for any reason.
+    const cs = getComputedStyle(document.documentElement)
+    const token = (name: string, fallback: string) =>
+      cs.getPropertyValue(name).trim() || fallback
+    const fg = token("--color-foreground", "oklch(0.984 0.003 247.858)")
+    const border = token("--color-border", "oklch(0.372 0.044 257.287)")
+    const success = token("--color-success", "oklch(0.696 0.17 162.48)")
+    const destructive = token("--color-destructive", "oklch(0.637 0.237 25.331)")
+
     const chart = createChart(containerRef.current, {
       autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "rgba(248, 250, 252, 0.85)", // matches MASTER --color-foreground
+        textColor: fg,
         fontFamily: "var(--font-sans)",
       },
       grid: {
-        vertLines: { color: "rgba(51, 65, 85, 0.2)" }, // MASTER --color-border at low alpha
-        horzLines: { color: "rgba(51, 65, 85, 0.2)" },
+        vertLines: { color: border, style: 1 },
+        horzLines: { color: border, style: 1 },
       },
-      rightPriceScale: { borderColor: "rgba(51, 65, 85, 0.5)" },
+      rightPriceScale: { borderColor: border },
       timeScale: {
-        borderColor: "rgba(51, 65, 85, 0.5)",
+        borderColor: border,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -64,10 +75,10 @@ export function CandleChart({ initial, live, className }: CandleChartProps) {
     })
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#16a34a", // green-600
-      downColor: "#ef4444", // MASTER --color-destructive
-      wickUpColor: "#16a34a",
-      wickDownColor: "#ef4444",
+      upColor: success,
+      downColor: destructive,
+      wickUpColor: success,
+      wickDownColor: destructive,
       borderVisible: false,
     })
 

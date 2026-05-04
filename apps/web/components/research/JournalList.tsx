@@ -47,8 +47,8 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-      <div className="overflow-hidden rounded-md border border-border">
-        <table className="w-full text-xs">
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full min-w-[34rem] text-xs">
           <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
             <tr>
               <Th>date</Th>
@@ -64,24 +64,25 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
             {trades.map((t) => (
               <tr
                 key={t.id}
-                tabIndex={0}
-                role="button"
-                aria-pressed={selected?.id === t.id}
-                aria-label={`select ${t.symbol} ${t.timeframe} ${t.side} from ${shortDate(t.trade_ts)}`}
-                onClick={() => setSelected(t)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    setSelected(t)
-                  }
-                }}
                 className={cn(
-                  "cursor-pointer transition-colors duration-150 ease-out hover:bg-accent/10",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:-outline-offset-2",
+                  "relative transition-colors duration-150 ease-out hover:bg-accent/10",
+                  "focus-within:bg-accent/15",
                   selected?.id === t.id && "bg-accent/20",
                 )}
               >
-                <Td mono>{shortDate(t.trade_ts)}</Td>
+                {/* Stretched-button pattern: keeps native <table>/<tr>/<td>
+                    semantics for screen readers; clicking anywhere selects. */}
+                <Td mono>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(t)}
+                    aria-pressed={selected?.id === t.id}
+                    aria-label={`select ${t.symbol} ${t.timeframe} ${t.side} from ${shortDate(t.trade_ts)}`}
+                    className="font-mono after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+                  >
+                    {shortDate(t.trade_ts)}
+                  </button>
+                </Td>
                 <Td>
                   {t.symbol}
                   <span className="ml-1 text-muted-foreground">{t.timeframe}</span>

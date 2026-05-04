@@ -21,7 +21,7 @@ const ITEMS: SubnavItem[] = [
 export function ResearchSubnav() {
   const pathname = usePathname()
   return (
-    <div className="border-b border-border bg-background/80">
+    <div className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur">
       <nav
         aria-label="research sections"
         className="-mx-1 flex items-center gap-1 overflow-x-auto px-4 py-1.5 sm:px-6"

@@ -36,9 +36,11 @@ export async function fetchOhlcv(
 // -----------------------------------------------------------------------------
 
 export interface HealthDTO {
-  status: "ok" | string
-  db: "ok" | string
-  valkey: "ok" | string
+  status: "ok" | "degraded"
+  db: "ok" | "fail"
+  valkey: "ok" | "fail"
+  openrouter: "configured" | "missing"
+  voyage: "configured" | "missing"
 }
 
 export async function fetchHealth(
@@ -60,7 +62,7 @@ export interface StrategyMetricsDTO {
   avg_loss_R: number
   expectancy_R: number
   sharpe: number
-  sortino: number
+  sortino: number | null
   max_drawdown: number
   max_drawdown_duration_bars: number
   calmar: number

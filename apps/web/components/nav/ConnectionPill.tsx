@@ -26,23 +26,28 @@ export function ConnectionPill() {
   const tone = (() => {
     if (isLoading) return "loading"
     if (isError || !data) return "down"
-    if (data.db === "ok" && data.valkey === "ok") return "ok"
+    const allOk =
+      data.db === "ok" &&
+      data.valkey === "ok" &&
+      data.openrouter === "configured" &&
+      data.voyage === "configured"
+    if (allOk) return "ok"
     return "partial"
   })()
 
   const dotClass = {
     loading: "bg-muted-foreground animate-pulse",
-    ok: "bg-primary",
-    partial: "bg-amber-400",
+    ok: "bg-success",
+    partial: "bg-warning",
     down: "bg-destructive",
   }[tone]
 
   const title = {
     loading: "checking data plane…",
-    ok: "data plane healthy: db + valkey reachable",
+    ok: "data plane healthy: db + valkey + openrouter + voyage all set",
     partial: data
-      ? `partial: db=${data.db} · valkey=${data.valkey}`
-      : "partial",
+      ? `degraded: db=${data.db} valkey=${data.valkey} openrouter=${data.openrouter} voyage=${data.voyage}`
+      : "degraded",
     down: "api unreachable",
   }[tone]
 

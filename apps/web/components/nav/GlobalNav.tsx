@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FlaskConicalIcon, MessageSquareIcon, MoonIcon } from "lucide-react"
+import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -52,12 +52,8 @@ export function GlobalNav() {
           )
         })}
       </nav>
-      <div className="ml-auto flex items-center gap-3 sm:gap-4">
+      <div className="ml-auto flex items-center">
         <ConnectionPill />
-        <MoonIcon
-          className="size-3.5 text-muted-foreground"
-          aria-label="dark theme (forced)"
-        />
       </div>
     </header>
   )
