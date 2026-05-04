@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.tools._time import floor_to_timeframe
 from app.alerts.dsl import RuleSpec
 from app.alerts.evaluator import build_snapshot, evaluate_rule
-from app.broadcasting.pubsub import publish_json, subscribe
+from app.broadcasting.pubsub import market_channel, publish_json, subscribe
 from app.config import get_settings
 from app.data.binance_adapter import EXCHANGE_NAME
 from app.db import session_scope
@@ -48,10 +48,26 @@ def alerts_channel(user_id: str) -> str:
     return f"alerts:user:{user_id}"
 
 
-def _market_channel(exchange: str, symbol: str, timeframe: str) -> str:
-    # Local copy of pubsub.market_channel — kept here so a future split of
-    # ingestion vs alerts modules doesn't tangle imports.
-    return f"mkt:{exchange}:{symbol.lower()}:k:{timeframe}"
+def _build_event_payload(
+    *,
+    event_id: int,
+    rule_id: str | None,
+    rule_name: str,
+    fired_at: datetime,
+    kind: str,
+    severity: str,
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
+    """Single source of truth for the WS-bound shape (also matches AlertEventPayload in lib/ws.ts)."""
+    return {
+        "event_id": event_id,
+        "rule_id": rule_id,
+        "rule_name": rule_name,
+        "fired_at": fired_at.isoformat(),
+        "kind": kind,
+        "severity": severity,
+        "snapshot": snapshot,
+    }
 
 
 async def _fetch_active_rules(
@@ -61,7 +77,8 @@ async def _fetch_active_rules(
         await session.execute(
             text(
                 """
-                SELECT id::text, user_id, name, spec, cooldown_s, last_fired_at
+                SELECT id::text, user_id, name, spec, cooldown_s, last_fired_at,
+                       updated_at
                 FROM alert_rules
                 WHERE enabled = true
                   AND spec->>'symbol' = :sym
@@ -75,11 +92,12 @@ async def _fetch_active_rules(
 
 
 def _max_lookback(specs: Iterable[IndicatorSpec]) -> int:
-    """Heuristic: the panel needs at least max(spec.length) + buffer rows.
-    300 is plenty for any indicator we currently expose (longest default is
-    EMA-200ish; ADX needs 2× length warmup)."""
+    """The panel needs max(spec.length) × 3 rows to warm up indicators (Wilder
+    smoothing on RSI/ATR/ADX needs ~2× length, plus headroom for cross_*
+    operators reading the previous bar). Floor at 60 so a 1-rule RSI(14) tick
+    fetches ~60 candles, not 300."""
     lengths = [s.length or 50 for s in specs]
-    return max(300, max(lengths, default=50) * 3)
+    return max(60, max(lengths, default=50) * 3)
 
 
 def _union_specs(specs_lists: list[list[IndicatorSpec]]) -> list[IndicatorSpec]:
@@ -103,76 +121,105 @@ def _is_within_cooldown(rule: dict[str, Any]) -> bool:
     return bool(age < cooldown)
 
 
-async def _record_hit(
+# Module-level cache of compiled RuleSpec keyed by (rule_id, updated_at). Specs
+# are immutable while a rule is enabled, so the validator only runs when a rule
+# is created or PATCHed. Cleared lazily — entries with stale updated_at are
+# overwritten on the next tick.
+_SPEC_CACHE: dict[str, tuple[datetime, RuleSpec]] = {}
+
+
+def _compile_spec(rule: dict[str, Any]) -> RuleSpec | None:
+    rule_id = rule["id"]
+    updated_at = rule["updated_at"]
+    cached = _SPEC_CACHE.get(rule_id)
+    if cached is not None and cached[0] == updated_at:
+        return cached[1]
+    try:
+        spec = RuleSpec.model_validate(rule["spec"])
+    except Exception as exc:
+        log.warning("alerts.skip_invalid_spec", rule_id=rule_id, error=str(exc))
+        return None
+    _SPEC_CACHE[rule_id] = (updated_at, spec)
+    return spec
+
+
+async def _record_hits_batch(
     session: AsyncSession,
     *,
-    rule: dict[str, Any],
-    snapshot: dict[str, Any],
-) -> dict[str, Any]:
-    row = (
+    hits: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Insert N alert_events + bump last_fired_at for N rules in one session.
+
+    Returns `(rule, payload)` pairs in input order — the caller needs the rule
+    to know which user_id to publish to.
+    """
+    out: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for rule, snapshot in hits:
+        row = (
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO alert_events (user_id, rule_id, kind, severity, snapshot)
+                    VALUES (:uid, CAST(:rid AS uuid), 'rule_match', 'medium', CAST(:snap AS jsonb))
+                    RETURNING id, fired_at
+                    """
+                ),
+                {
+                    "uid": rule["user_id"],
+                    "rid": rule["id"],
+                    "snap": json.dumps(snapshot),
+                },
+            )
+        ).mappings().one()
         await session.execute(
             text(
                 """
-                INSERT INTO alert_events (user_id, rule_id, kind, severity, snapshot)
-                VALUES (:uid, CAST(:rid AS uuid), 'rule_match', 'medium', CAST(:snap AS jsonb))
-                RETURNING id, fired_at
+                UPDATE alert_rules SET last_fired_at = now(), updated_at = now()
+                WHERE id = CAST(:rid AS uuid)
                 """
             ),
-            {
-                "uid": rule["user_id"],
-                "rid": rule["id"],
-                "snap": json.dumps(snapshot),
-            },
+            {"rid": rule["id"]},
         )
-    ).mappings().one()
-    await session.execute(
-        text(
-            """
-            UPDATE alert_rules SET last_fired_at = now(), updated_at = now()
-            WHERE id = CAST(:rid AS uuid)
-            """
-        ),
-        {"rid": rule["id"]},
-    )
-    return {
-        "event_id": row["id"],
-        "rule_id": rule["id"],
-        "rule_name": rule["name"],
-        "fired_at": row["fired_at"].isoformat(),
-        "kind": "rule_match",
-        "severity": "medium",
-        "snapshot": snapshot,
-    }
+        out.append(
+            (
+                rule,
+                _build_event_payload(
+                    event_id=row["id"],
+                    rule_id=rule["id"],
+                    rule_name=rule["name"],
+                    fired_at=row["fired_at"],
+                    kind="rule_match",
+                    severity="medium",
+                    snapshot=snapshot,
+                ),
+            )
+        )
+    return out
 
 
 async def _evaluate_close(symbol: str, timeframe: str) -> None:
-    """Single closed-candle pass — read rules, compute panel once, evaluate all."""
+    """Single closed-candle pass — read rules, compute panel once, evaluate all,
+    persist hits in one transaction."""
     async with session_scope() as session:
         rules = await _fetch_active_rules(session, symbol=symbol, timeframe=timeframe)
-    if not rules:
-        return
+        if not rules:
+            return
+        compiled: list[tuple[dict[str, Any], RuleSpec]] = []
+        for r in rules:
+            spec = _compile_spec(r)
+            if spec is not None:
+                compiled.append((r, spec))
+        if not compiled:
+            return
 
-    rule_specs: list[RuleSpec] = []
-    for r in rules:
-        try:
-            rule_specs.append(RuleSpec.model_validate(r["spec"]))
-        except Exception as exc:
-            log.warning(
-                "alerts.skip_invalid_spec", rule_id=r["id"], error=str(exc)
-            )
-            rule_specs.append(None)  # type: ignore[arg-type]
-
-    union = _union_specs([s.indicators for s in rule_specs if s is not None])
-    lookback = _max_lookback(union)
-    until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
-
-    async with session_scope() as session:
+        union = _union_specs([s.indicators for _, s in compiled])
+        until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
         panel = await compute_panel(
             session,
             exchange=EXCHANGE_NAME,
             symbol=symbol,
             timeframe=timeframe,
-            lookback=lookback,
+            lookback=_max_lookback(union),
             specs=union,
             until=until,
         )
@@ -180,25 +227,26 @@ async def _evaluate_close(symbol: str, timeframe: str) -> None:
     if panel.height == 0:
         return
 
-    for rule, spec in zip(rules, rule_specs, strict=True):
-        if spec is None:
-            continue
+    hits: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for rule, spec in compiled:
         if not evaluate_rule(spec, panel):
             continue
         if _is_within_cooldown(rule):
-            log.info(
-                "alerts.cooldown_blocked",
-                rule_id=rule["id"],
-                last_fired_at=rule["last_fired_at"].isoformat() if rule["last_fired_at"] else None,
-            )
+            log.info("alerts.cooldown_blocked", rule_id=rule["id"])
             continue
-        snapshot = build_snapshot(spec, panel)
-        async with session_scope() as session:
-            payload = await _record_hit(session, rule=rule, snapshot=snapshot)
+        hits.append((rule, build_snapshot(spec, panel)))
+
+    if not hits:
+        return
+
+    async with session_scope() as session:
+        recorded = await _record_hits_batch(session, hits=hits)
+
+    for rule, payload in recorded:
         await publish_json(alerts_channel(rule["user_id"]), payload)
         log.info(
             "alerts.fired",
-            rule_id=rule["id"],
+            rule_id=payload["rule_id"],
             event_id=payload["event_id"],
             symbol=symbol,
             timeframe=timeframe,
@@ -206,7 +254,7 @@ async def _evaluate_close(symbol: str, timeframe: str) -> None:
 
 
 async def _market_loop(symbol: str, timeframe: str) -> None:
-    channel = _market_channel(EXCHANGE_NAME, symbol, timeframe)
+    channel = market_channel(exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe)
     log.info("alerts.market_loop.start", channel=channel)
     while True:
         try:
@@ -255,18 +303,16 @@ async def _bias_listener_loop() -> None:
                     _channel: str,
                     payload: str,
                 ) -> None:
-                    try:
-                        ev = json.loads(payload)
-                    except Exception:
-                        log.warning("alerts.bias_payload_unparseable", payload=payload)
-                        return
-                    await _record_bias_promoted(ev)
+                    # Pass the raw JSON string straight through — the INSERT
+                    # casts to jsonb without a Python round-trip.
+                    await _record_bias_promoted(payload)
 
                 await conn.add_listener("bias_events_high", _on_notify)
-                # Block until cancelled — Event.wait() with no setter parks
-                # the task without spinning a sleep loop.
+                # Park task; teardown on cancellation triggers the finally block.
                 await asyncio.Event().wait()
             finally:
+                with contextlib.suppress(Exception):
+                    await conn.remove_listener("bias_events_high", _on_notify)
                 with contextlib.suppress(Exception):
                     await conn.close()
         except asyncio.CancelledError:
@@ -277,7 +323,15 @@ async def _bias_listener_loop() -> None:
             await asyncio.sleep(2.0)
 
 
-async def _record_bias_promoted(bias_event: dict[str, Any]) -> None:
+async def _record_bias_promoted(bias_payload_json: str) -> None:
+    """Insert + publish in one shot. `bias_payload_json` is the raw JSON string
+    from pg_notify; we only parse what we need for the log/key fields."""
+    try:
+        bias_event = json.loads(bias_payload_json)
+    except Exception:
+        log.warning("alerts.bias_payload_unparseable", payload=bias_payload_json)
+        return
+    user_id = bias_event.get("user_id", "me")
     async with session_scope() as session:
         row = (
             await session.execute(
@@ -288,22 +342,19 @@ async def _record_bias_promoted(bias_event: dict[str, Any]) -> None:
                     RETURNING id, fired_at
                     """
                 ),
-                {
-                    "uid": bias_event.get("user_id", "me"),
-                    "snap": json.dumps(bias_event),
-                },
+                {"uid": user_id, "snap": bias_payload_json},
             )
         ).mappings().one()
-    payload = {
-        "event_id": row["id"],
-        "rule_id": None,
-        "rule_name": f"bias:{bias_event.get('kind', 'unknown')}",
-        "fired_at": row["fired_at"].isoformat(),
-        "kind": "bias_promoted",
-        "severity": "high",
-        "snapshot": bias_event,
-    }
-    await publish_json(alerts_channel(bias_event.get("user_id", "me")), payload)
+    payload = _build_event_payload(
+        event_id=row["id"],
+        rule_id=None,
+        rule_name=f"bias:{bias_event.get('kind', 'unknown')}",
+        fired_at=row["fired_at"],
+        kind="bias_promoted",
+        severity="high",
+        snapshot=bias_event,
+    )
+    await publish_json(alerts_channel(user_id), payload)
     log.info(
         "alerts.bias_promoted",
         bias_kind=bias_event.get("kind"),
@@ -322,7 +373,7 @@ class AlertsRuntime:
             return
         for symbol, tf in WATCH_LIST:
             if tf == "1m":
-                # 1m candles fire every 60s — too noisy for alerts. Skip.
+                # 1m candles fire every 60s — too noisy for alerts.
                 continue
             t = asyncio.create_task(
                 _market_loop(symbol, tf), name=f"alerts:{symbol}:{tf}"

@@ -6,6 +6,7 @@ import { useMemo } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { formatTimeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   type AlertEventDTO,
@@ -17,18 +18,6 @@ import { type AlertEventPayload } from "@/lib/ws"
 interface AlertEventFeedProps {
   liveEvents: AlertEventPayload[]
   onClose?: () => void
-}
-
-function shortTime(ts: string): string {
-  const d = new Date(ts)
-  const now = new Date()
-  const sec = Math.max(0, Math.floor((now.getTime() - d.getTime()) / 1000))
-  if (sec < 60) return `${sec}s ago`
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h ago`
-  return `${Math.floor(hr / 24)}d ago`
 }
 
 function severityClass(sev: string): string {
@@ -126,7 +115,7 @@ export function AlertEventFeed({ liveEvents, onClose }: AlertEventFeedProps) {
                       {ruleName}
                     </span>
                     <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                      {shortTime(ev.fired_at)}
+                      {formatTimeAgo(ev.fired_at)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">

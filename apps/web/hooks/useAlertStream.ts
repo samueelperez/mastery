@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 import { type AlertEventPayload, type AlertWsMessage, connectAlertsWs } from "@/lib/ws"
 
@@ -12,20 +12,17 @@ export interface UseAlertStreamResult {
 }
 
 /**
- * Single global subscription to /ws/alerts. Holds the last 50 events in
- * memory; older events fall off the tail. Reconnects automatically.
- *
- * NOT a substitute for the REST `/alerts/events` history — components that
- * need the full feed should fetch via react-query and merge the WS push on top.
+ * Single global subscription to /ws/alerts. Holds the last N events in
+ * memory; older events fall off the tail. Reconnects automatically and
+ * dedupes by event_id so a WS reconnect that re-delivers a recent event
+ * doesn't double-count the badge.
  */
 export function useAlertStream(userId: string = "me", buffer = 50): UseAlertStreamResult {
   const [events, setEvents] = useState<AlertEventPayload[]>([])
   const [connected, setConnected] = useState(false)
-  const wsRef = useRef<ReturnType<typeof connectAlertsWs> | null>(null)
 
   useEffect(() => {
     const ws = connectAlertsWs(userId)
-    wsRef.current = ws
 
     const onOpen = () => setConnected(true)
     const onClose = () => setConnected(false)
@@ -37,7 +34,11 @@ export function useAlertStream(userId: string = "me", buffer = 50): UseAlertStre
         return
       }
       if (parsed.type !== "alert_event") return
-      setEvents((prev) => [parsed!.data, ...prev].slice(0, buffer))
+      const data = parsed.data
+      setEvents((prev) => {
+        if (prev.some((e) => e.event_id === data.event_id)) return prev
+        return [data, ...prev].slice(0, buffer)
+      })
     }
 
     ws.addEventListener("open", onOpen)
@@ -49,7 +50,6 @@ export function useAlertStream(userId: string = "me", buffer = 50): UseAlertStre
       ws.removeEventListener("close", onClose)
       ws.removeEventListener("message", onMessage as EventListener)
       ws.close()
-      wsRef.current = null
     }
   }, [userId, buffer])
 

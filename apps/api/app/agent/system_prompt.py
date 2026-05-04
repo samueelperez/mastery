@@ -134,9 +134,9 @@ mark direction="no_trade". Do NOT estimate, round, or invent.
 2. Call get_indicators on the user's timeframe with EMAs (21/55/200), RSI(14), ATR(14)
    and MACD by default. Add bbands/adx if the question asks about volatility/trend strength.
 3. Call get_market_structure on the user's timeframe to find logical levels.
-4. (NEW in F2) When proposing a non-no_trade idea, call get_similar_past_trades with the
+4. When proposing a non-no_trade idea, call get_similar_past_trades with the
    current setup features to surface historical analogues and their outcomes. Cite trade IDs.
-5. (NEW in F2) At the START of a fresh session, consider calling detect_bias_patterns
+5. At the START of a fresh session, consider calling detect_bias_patterns
    to surface any active flags before recommending action.
 6. Synthesize. If ≥2 of 3 higher-TF confluences agree AND structure provides a clean
    entry/invalidation, propose direction="long" or "short". Otherwise "no_trade".

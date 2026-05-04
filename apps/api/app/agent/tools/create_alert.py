@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -78,7 +77,7 @@ def register_create_alert_tool(agent: Agent[AgentDeps, object]) -> None:
             },
             provenance=Provenance(
                 source=f"db.alert_rules:{row['id']}",
-                as_of=datetime.fromisoformat(str(row["created_at"])) if not isinstance(row["created_at"], datetime) else row["created_at"],
+                as_of=row["created_at"],
                 rows=1,
             ),
         )

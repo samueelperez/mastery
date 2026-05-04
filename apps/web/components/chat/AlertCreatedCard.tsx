@@ -5,6 +5,8 @@ import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import type { AlertConditionDTO } from "@/lib/api"
+import { summarizeAlertConditions } from "@/lib/format"
 
 interface AlertCreatedToolOutput {
   alert_id: string
@@ -12,7 +14,7 @@ interface AlertCreatedToolOutput {
   spec: {
     symbol: string
     timeframe: string
-    conditions: { left: string; op: string; right: number | string }[]
+    conditions: AlertConditionDTO[]
     logic: "all" | "any"
   }
   cooldown_s: number
@@ -20,15 +22,6 @@ interface AlertCreatedToolOutput {
 
 interface AlertCreatedCardProps {
   output: AlertCreatedToolOutput
-}
-
-function summarizeConditions(
-  conds: { left: string; op: string; right: number | string }[],
-  logic: "all" | "any",
-): string {
-  const parts = conds.map((c) => `${c.left} ${c.op} ${c.right}`)
-  if (parts.length === 1) return parts[0]
-  return parts.join(logic === "all" ? " AND " : " OR ")
 }
 
 export function AlertCreatedCard({ output: o }: AlertCreatedCardProps) {
@@ -61,7 +54,7 @@ export function AlertCreatedCard({ output: o }: AlertCreatedCardProps) {
             condition ({o.spec.logic})
           </p>
           <p className="font-mono text-xs text-muted-foreground">
-            {summarizeConditions(o.spec.conditions, o.spec.logic)}
+            {summarizeAlertConditions(o.spec.conditions, o.spec.logic)}
           </p>
         </div>
         <Link
