@@ -1,13 +1,24 @@
 "use client"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { Loader2, Shield } from "lucide-react"
+import { KeyRound, Loader2, Mail, UserIcon } from "lucide-react"
 import { useState } from "react"
 
+import { BrandWordmark } from "@/components/auth/BrandWordmark"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth/auth-client"
+import { cn } from "@/lib/utils"
+
+const CARD_BASE =
+  "w-full max-w-sm rounded-xl bg-card/95 p-7 ring-1 ring-border shadow-2xl shadow-black/40 backdrop-blur-sm"
+const CARD_ENTER =
+  "animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out motion-reduce:animate-none"
 
 export function SetupForm() {
   const queryClient = useQueryClient()
@@ -32,61 +43,96 @@ export function SetupForm() {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl bg-card p-8 ring-1 ring-border">
-      <div className="mb-6 flex flex-col items-center gap-3">
-        <Shield className="size-10 text-primary" strokeWidth={1.5} aria-hidden />
-        <h1 className="font-mono text-base tracking-tight text-foreground">
-          First-user setup
-        </h1>
-        <p className="text-center text-xs text-muted-foreground">
-          One-shot bootstrap. After this account is created, /auth/setup is gone
-          and the system is single-user with you as the owner.
-        </p>
+    <div className={cn(CARD_BASE, CARD_ENTER)}>
+      <div className="mb-6 flex flex-col items-center">
+        <BrandWordmark caption="first-user setup" />
       </div>
 
+      <p className="mb-6 text-center text-xs leading-relaxed text-muted-foreground">
+        One-shot bootstrap. After this account is created, /auth/setup is gone
+        and the system is single-user with you as the owner.
+      </p>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="name">Nombre</Label>
-          <Input
-            id="name"
-            type="text"
-            placeholder="Samuel"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            autoFocus
-          />
+        <div className="flex flex-col gap-1.5">
+          <Label
+            htmlFor="name"
+            className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+          >
+            Nombre
+          </Label>
+          <InputGroup>
+            <InputGroupAddon>
+              <UserIcon aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput
+              id="name"
+              type="text"
+              placeholder="Samuel"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoFocus
+            />
+          </InputGroup>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="email">Correo electrónico</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="tu@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+        <div className="flex flex-col gap-1.5">
+          <Label
+            htmlFor="email"
+            className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+          >
+            Correo electrónico
+          </Label>
+          <InputGroup>
+            <InputGroupAddon>
+              <Mail aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput
+              id="email"
+              type="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </InputGroup>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="password">Contraseña (mín. 8)</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+        <div className="flex flex-col gap-1.5">
+          <Label
+            htmlFor="password"
+            className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+          >
+            Contraseña (mín. 8)
+          </Label>
+          <InputGroup>
+            <InputGroupAddon>
+              <KeyRound aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </InputGroup>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p
+            role="alert"
+            className="font-mono text-[11px] uppercase tracking-widest text-destructive"
+          >
+            {error}
+          </p>
+        )}
 
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading && <Loader2 className="size-4 animate-spin" />}
+        <Button type="submit" disabled={loading} className="mt-1 w-full">
+          {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
           Crear cuenta
         </Button>
       </form>

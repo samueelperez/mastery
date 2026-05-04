@@ -1,16 +1,28 @@
 "use client"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Loader2, Mail, Shield } from "lucide-react"
+import { ArrowLeft, KeyRound, Loader2, Mail } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 
+import { BrandWordmark } from "@/components/auth/BrandWordmark"
+import { LivePulse } from "@/components/auth/LivePulse"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth/auth-client"
+import { cn } from "@/lib/utils"
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true"
+
+const CARD_BASE =
+  "w-full max-w-sm rounded-xl bg-card/95 p-7 ring-1 ring-border shadow-2xl shadow-black/40 backdrop-blur-sm"
+const CARD_ENTER =
+  "animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out motion-reduce:animate-none"
 
 function GoogleIcon() {
   return (
@@ -74,109 +86,139 @@ function LoginForm() {
 
   if (showEmailForm) {
     return (
-      <div className="w-full max-w-sm rounded-2xl bg-card p-8 ring-1 ring-border">
-        <div className="mb-6 flex flex-col items-center gap-3">
+      <>
+        <div className={cn(CARD_BASE, CARD_ENTER)}>
           <button
+            type="button"
             onClick={() => {
               setShowEmailForm(false)
               setError("")
             }}
-            className="self-start text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="back"
+            className="-ml-1 mb-4 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
           >
-            <ArrowLeft className="size-5" />
+            <ArrowLeft className="size-3.5" aria-hidden />
+            atrás
           </button>
-          <Shield className="size-10 text-primary" strokeWidth={1.5} aria-hidden />
-          <h1 className="font-mono text-base tracking-tight text-foreground">
-            Acceder con correo
-          </h1>
+
+          <div className="mb-6 flex flex-col items-center">
+            <BrandWordmark caption="email + password" />
+          </div>
+
+          <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="email"
+                className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+              >
+                Correo electrónico
+              </Label>
+              <InputGroup>
+                <InputGroupAddon>
+                  <Mail aria-hidden />
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="email"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </InputGroup>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="password"
+                className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
+              >
+                Contraseña
+              </Label>
+              <InputGroup>
+                <InputGroupAddon>
+                  <KeyRound aria-hidden />
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </InputGroup>
+            </div>
+
+            {error && (
+              <p
+                role="alert"
+                className="font-mono text-[11px] uppercase tracking-widest text-destructive"
+              >
+                {error}
+              </p>
+            )}
+
+            <Button type="submit" disabled={loading} className="mt-1 w-full">
+              {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
+              Acceder
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/auth/login")}
+              className="text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+            >
+              ¿olvidaste tu contraseña?
+            </button>
+          </form>
         </div>
-
-        <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="email">Correo electrónico</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading && <Loader2 className="size-4 animate-spin" />}
-            Acceder
-          </Button>
-
-          <button
-            type="button"
-            onClick={() => router.push("/auth/login")}
-            className="text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            ¿Olvidaste tu contraseña?
-          </button>
-        </form>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl bg-card p-8 ring-1 ring-border">
-      <div className="mb-6 flex flex-col items-center gap-3">
-        <Shield className="size-10 text-primary" strokeWidth={1.5} aria-hidden />
-        <h1 className="font-mono text-base tracking-tight text-foreground">
-          Acceder
-        </h1>
-        <p className="text-center text-xs text-muted-foreground">
-          trading-copilot · interpreter and orchestrator, never an oracle.
-        </p>
-      </div>
+    <>
+      <div className={cn(CARD_BASE, CARD_ENTER)}>
+        <div className="mb-6 flex flex-col items-center">
+          <BrandWordmark caption="secure session" />
+        </div>
 
-      <div className="flex flex-col gap-3">
-        {GOOGLE_ENABLED && (
+        <div className="flex flex-col gap-2.5">
+          {GOOGLE_ENABLED && (
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full justify-center gap-3"
+              onClick={() => {
+                authClient.signIn.social({
+                  provider: "google",
+                  callbackURL: redirectTo,
+                })
+              }}
+            >
+              <GoogleIcon />
+              Acceder con Google
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="lg"
             className="w-full justify-center gap-3"
-            onClick={() => {
-              authClient.signIn.social({
-                provider: "google",
-                callbackURL: redirectTo,
-              })
-            }}
+            onClick={() => setShowEmailForm(true)}
           >
-            <GoogleIcon />
-            Acceder con Google
+            <Mail className="size-5" aria-hidden />
+            Acceder con correo electrónico
           </Button>
-        )}
+        </div>
 
-        <Button
-          variant="outline"
-          size="lg"
-          className="w-full justify-center gap-3"
-          onClick={() => setShowEmailForm(true)}
-        >
-          <Mail className="size-5" />
-          Acceder con correo electrónico
-        </Button>
+        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          interpreter and orchestrator · never an oracle
+        </p>
       </div>
-    </div>
+
+      <LivePulse />
+    </>
   )
 }
