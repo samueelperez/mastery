@@ -16,7 +16,7 @@ import { authClient } from "@/lib/auth/auth-client"
 import { cn } from "@/lib/utils"
 
 const CARD_BASE =
-  "w-full max-w-sm rounded-xl bg-card/95 p-7 ring-1 ring-border shadow-2xl shadow-black/40 backdrop-blur-sm"
+  "w-full max-w-md rounded-xl bg-card/95 p-8 ring-1 ring-border shadow-2xl shadow-black/40 backdrop-blur-sm"
 const CARD_ENTER =
   "animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out motion-reduce:animate-none"
 
