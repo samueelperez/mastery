@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query"
 import { LogOutIcon, UserIcon } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import {
   DropdownMenu,
@@ -25,17 +26,28 @@ function initials(input: string | null | undefined): string {
   return trimmed.slice(0, 2).toUpperCase()
 }
 
+/** Reserve the same 32×32 footprint server-side and pre-mount client-side, so
+ * the navbar layout doesn't shift when the session resolves. The empty
+ * placeholder is byte-identical between SSR and first client render → no
+ * hydration warning. */
+function UserMenuPlaceholder() {
+  return <span className="size-8" aria-hidden />
+}
+
 export function UserMenu() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const { data, isPending } = authClient.useSession()
   const queryClient = useQueryClient()
 
-  if (isPending) {
-    return (
-      <span
-        className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground"
-        aria-busy="true"
-      />
-    )
+  // Defer rendering session-dependent UI until after hydration: SSR + first
+  // client paint always render the placeholder, the actual menu mounts on the
+  // second tick. authClient.useSession resolves from the cookie at different
+  // moments on server vs. client, which is exactly the hydration mismatch
+  // pattern the React error message describes.
+  if (!mounted || isPending) {
+    return <UserMenuPlaceholder />
   }
   if (!data?.user) return null
 
