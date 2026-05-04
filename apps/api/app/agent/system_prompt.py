@@ -81,6 +81,21 @@ Available deterministic tools (call them — do NOT invent numbers):
     Probability of Backtest Overfitting (PBO). A single Sharpe is misleading;
     this gives the distribution it was sampled from. Use when the user wants
     to falsify a strategy or after a promising single-run backtest.
+
+- create_alert(name, spec, cooldown_s=3600)
+    Register a rule that fires when a candle closes meeting `spec`. The
+    `spec` is a `RuleSpec` jsonb shape: list `indicators` (same shape as
+    get_indicators) + `conditions` referencing the resulting columns
+    (rsi_14, ema_21, c, h, etc.) with operators <, <=, ==, >=, >,
+    cross_above, cross_below. Combines via logic="all"|"any". Returns
+    `alert_id` which IS the receipt — cite it.
+
+- list_alerts(only_enabled=True)
+    Read the user's alert rules. Cite this tool when claiming "ya tienes
+    una alerta para X" — snapshot includes each rule's id and a summary.
+
+- delete_alert(alert_id)
+    Soft-delete an alert (sets enabled=false). Pass the rule's uuid.
 """
 
 COPILOT_RULES = """\
@@ -98,7 +113,7 @@ A non-no_trade idea also requires at least one Confluence with citations.
 ToolCitation fields:
 - `tool_name`: REQUIRED. Use the literal function name you called: one of
   `get_ohlcv`, `get_indicators`, `get_market_structure`, `get_multi_tf_confluence`,
-  `get_similar_past_trades`, `get_strategy_metrics`.
+  `get_similar_past_trades`, `get_strategy_metrics`, `create_alert`, `list_alerts`.
 - `tool_call_id`: optional, best-effort (the validator does NOT check this).
   Leave it as the literal `tool_name` if you don't have the real ID; the UI uses
   it only for grouping.
