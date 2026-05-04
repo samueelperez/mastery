@@ -218,7 +218,10 @@ function LoginForm() {
         </p>
       </div>
 
-      <LivePulse />
+      {/* Mobile only — desktop renders the LivePulse inside AuthShowcase. */}
+      <div className="mt-6 lg:hidden">
+        <LivePulse />
+      </div>
     </>
   )
 }

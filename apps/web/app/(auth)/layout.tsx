@@ -1,41 +1,42 @@
-/** Auth layout — atmospheric backdrop with dot-grid + faint gold radial glow.
+import { AuthShowcase } from "@/components/auth/AuthShowcase"
+
+/** Auth layout — split: live BTCUSDT chart + identity on the left, form on
+ * the right (lg+). Mobile collapses to the form alone (showcase hidden) so
+ * sign-in stays fast on small screens.
  *
- * Visual: solid slate base, subtle dot pattern across the whole canvas, a
- * gold radial gradient anchored at top-center bleeding ~600px down. No
- * GlobalNav (that component returns null on /auth/*) so this layout owns
- * the screen.
- *
- * Both decorative layers are aria-hidden — they're pure atmosphere.
- */
+ * The dot-grid + gold radial glow live on the layout's full canvas behind
+ * both columns; AuthShowcase has its own border-right separator. */
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden bg-background px-4 py-8">
-      {/* Dot-grid texture */}
+    <div className="relative min-h-svh overflow-hidden bg-background">
+      {/* Decorative atmosphere */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-40"
+        className="pointer-events-none absolute inset-0 opacity-30"
         style={{
           backgroundImage:
             "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
           backgroundSize: "32px 32px",
         }}
       />
-      {/* Top gold glow */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[40rem] opacity-25"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[36rem] opacity-20"
         style={{
           background:
             "radial-gradient(ellipse at top, var(--color-primary) 0%, transparent 60%)",
         }}
       />
-      {/* Content */}
-      <div className="relative z-10 flex flex-col items-center gap-6">
-        {children}
+
+      <div className="relative z-10 grid min-h-svh grid-cols-1 lg:grid-cols-[minmax(0,1fr)_28rem]">
+        <AuthShowcase className="hidden lg:flex" />
+        <main className="flex items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
+          {children}
+        </main>
       </div>
     </div>
   )
