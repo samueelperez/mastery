@@ -1,5 +1,15 @@
 import { env } from "@/lib/env"
 
+/** All API calls cross-origin (Next on :3001, FastAPI on :8000) so the
+ * BetterAuth session cookie only rides along when `credentials: 'include'`
+ * is set. Wrap fetch once instead of repeating it 12 times. */
+function apiFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(input, { credentials: "include", ...init })
+}
+
 export interface CandleDTO {
   ts: string
   o: number
@@ -24,7 +34,7 @@ export async function fetchOhlcv(
 ): Promise<OHLCVResponseDTO> {
   const limit = opts.limit ?? 1000
   const url = `${env.apiUrl}/ohlcv/${encodeURIComponent(symbol)}/${encodeURIComponent(timeframe)}?limit=${limit}`
-  const res = await fetch(url, { signal: opts.signal })
+  const res = await apiFetch(url, { signal: opts.signal })
   if (!res.ok) {
     throw new Error(`fetchOhlcv failed: ${res.status} ${res.statusText}`)
   }
@@ -46,7 +56,7 @@ export interface HealthDTO {
 export async function fetchHealth(
   opts: { signal?: AbortSignal } = {},
 ): Promise<HealthDTO> {
-  const res = await fetch(`${env.apiUrl}/health`, { signal: opts.signal })
+  const res = await apiFetch(`${env.apiUrl}/health`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchHealth failed: ${res.status}`)
   return (await res.json()) as HealthDTO
 }
@@ -111,7 +121,7 @@ export async function fetchBacktests(
   if (opts.symbol) params.set("symbol", opts.symbol)
   if (opts.timeframe) params.set("timeframe", opts.timeframe)
   params.set("limit", String(opts.limit ?? 50))
-  const res = await fetch(`${env.apiUrl}/backtests?${params}`, { signal: opts.signal })
+  const res = await apiFetch(`${env.apiUrl}/backtests?${params}`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchBacktests failed: ${res.status}`)
   return (await res.json()) as BacktestRunSummaryDTO[]
 }
@@ -120,7 +130,7 @@ export async function fetchBacktest(
   runId: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<BacktestRunDetailDTO> {
-  const res = await fetch(`${env.apiUrl}/backtests/${encodeURIComponent(runId)}`, {
+  const res = await apiFetch(`${env.apiUrl}/backtests/${encodeURIComponent(runId)}`, {
     signal: opts.signal,
   })
   if (!res.ok) throw new Error(`fetchBacktest failed: ${res.status}`)
@@ -162,7 +172,7 @@ export async function fetchJournalTrades(
   if (opts.mode) params.set("mode", opts.mode)
   if (opts.regime) params.set("regime", opts.regime)
   params.set("limit", String(opts.limit ?? 50))
-  const res = await fetch(`${env.apiUrl}/journal/trades?${params}`, { signal: opts.signal })
+  const res = await apiFetch(`${env.apiUrl}/journal/trades?${params}`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchJournalTrades failed: ${res.status}`)
   return (await res.json()) as JournalTradeListRowDTO[]
 }
@@ -171,7 +181,7 @@ export async function fetchJournalTrade(
   tradeId: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<JournalTradeDetailDTO> {
-  const res = await fetch(`${env.apiUrl}/journal/trades/${encodeURIComponent(tradeId)}`, {
+  const res = await apiFetch(`${env.apiUrl}/journal/trades/${encodeURIComponent(tradeId)}`, {
     signal: opts.signal,
   })
   if (!res.ok) throw new Error(`fetchJournalTrade failed: ${res.status}`)
@@ -223,7 +233,7 @@ export async function fetchAlerts(
 ): Promise<AlertRuleDTO[]> {
   const params = new URLSearchParams()
   if (opts.only_enabled) params.set("only_enabled", "true")
-  const res = await fetch(`${env.apiUrl}/alerts?${params}`, { signal: opts.signal })
+  const res = await apiFetch(`${env.apiUrl}/alerts?${params}`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchAlerts failed: ${res.status}`)
   return (await res.json()) as AlertRuleDTO[]
 }
@@ -231,7 +241,7 @@ export async function fetchAlerts(
 export async function createAlert(
   body: { name: string; spec: AlertSpecDTO; cooldown_s?: number },
 ): Promise<AlertRuleDTO> {
-  const res = await fetch(`${env.apiUrl}/alerts`, {
+  const res = await apiFetch(`${env.apiUrl}/alerts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -244,7 +254,7 @@ export async function patchAlert(
   id: string,
   body: { enabled?: boolean; cooldown_s?: number },
 ): Promise<AlertRuleDTO> {
-  const res = await fetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -254,7 +264,7 @@ export async function patchAlert(
 }
 
 export async function deleteAlert(id: string): Promise<void> {
-  const res = await fetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
   if (!res.ok && res.status !== 204) throw new Error(`deleteAlert failed: ${res.status}`)
@@ -266,7 +276,7 @@ export async function fetchAlertEvents(
   const params = new URLSearchParams()
   if (opts.only_unread) params.set("only_unread", "true")
   if (opts.limit) params.set("limit", String(opts.limit))
-  const res = await fetch(`${env.apiUrl}/alerts/events?${params}`, {
+  const res = await apiFetch(`${env.apiUrl}/alerts/events?${params}`, {
     signal: opts.signal,
   })
   if (!res.ok) throw new Error(`fetchAlertEvents failed: ${res.status}`)
@@ -274,7 +284,7 @@ export async function fetchAlertEvents(
 }
 
 export async function markEventSeen(eventId: number): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${env.apiUrl}/alerts/events/${eventId}/seen`,
     { method: "POST" },
   )
