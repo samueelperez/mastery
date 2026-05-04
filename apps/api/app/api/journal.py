@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_user_id
 from app.db import session_dependency
 
 router = APIRouter()
@@ -48,7 +49,7 @@ class JournalTradeDetail(JournalTradeListRow):
 @router.get("/journal/trades", response_model=list[JournalTradeListRow], tags=["research"])
 async def list_journal_trades(
     session: Annotated[AsyncSession, Depends(session_dependency)],
-    user_id: Annotated[str, Query()] = "me",
+    user_id: Annotated[str, Depends(require_user_id)],
     mode: Annotated[JournalMode | None, Query()] = None,
     regime: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -77,6 +78,7 @@ async def list_journal_trades(
 async def get_journal_trade(
     trade_id: str,
     session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
 ) -> JournalTradeDetail:
     row = (
         await session.execute(
@@ -87,10 +89,10 @@ async def get_journal_trade(
                        summary_text, summary_hash, embedding_version,
                        news_24h, features
                 FROM journal_trades
-                WHERE id = CAST(:tid AS uuid)
+                WHERE id = CAST(:tid AS uuid) AND user_id = :uid
                 """
             ),
-            {"tid": trade_id},
+            {"tid": trade_id, "uid": user_id},
         )
     ).mappings().one_or_none()
     if not row:

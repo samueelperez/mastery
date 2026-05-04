@@ -71,6 +71,7 @@ def register_journal_query_tool(agent: Agent[AgentDeps, object]) -> None:
         async with ctx.deps.session_factory() as session:
             hits = await hybrid_search(
                 session,
+                user_id=ctx.deps.user_id,
                 query_text=query_text,
                 query_embedding=query_emb,
                 k=k,

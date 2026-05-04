@@ -26,10 +26,10 @@ def register_delete_alert_tool(agent: Agent[AgentDeps, object]) -> None:
                     """
                     UPDATE alert_rules
                     SET enabled = false, updated_at = now()
-                    WHERE id = CAST(:id AS uuid) AND user_id = 'me'
+                    WHERE id = CAST(:id AS uuid) AND user_id = :uid
                     """
                 ),
-                {"id": alert_id},
+                {"id": alert_id, "uid": ctx.deps.user_id},
             )
             await session.commit()
             disabled = (getattr(result, "rowcount", 0) or 0) > 0

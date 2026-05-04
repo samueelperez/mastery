@@ -47,11 +47,12 @@ def register_create_alert_tool(agent: Agent[AgentDeps, object]) -> None:
                     text(
                         """
                         INSERT INTO alert_rules (user_id, name, spec, cooldown_s)
-                        VALUES ('me', :name, CAST(:spec AS jsonb), :cd)
+                        VALUES (:uid, :name, CAST(:spec AS jsonb), :cd)
                         RETURNING id::text, created_at
                         """
                     ),
                     {
+                        "uid": ctx.deps.user_id,
                         "name": name,
                         "spec": spec.model_dump_json(),
                         "cd": cooldown_s,

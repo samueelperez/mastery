@@ -53,6 +53,7 @@ def register_log_trade_tool(agent: Agent[AgentDeps, object]) -> None:
         embedding = await embed_one(summary, input_type="document")
 
         trade = JournalTradeIn(
+            user_id=ctx.deps.user_id,
             trade_ts=ts,
             symbol=symbol,
             timeframe=timeframe,

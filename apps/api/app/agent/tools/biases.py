@@ -44,7 +44,9 @@ def register_bias_tool(agent: Agent[AgentDeps, object]) -> None:
         events. Subsequent calls within 24h read from cache.
         """
         async with ctx.deps.session_factory() as session:
-            cached = await list_recent_bias_events(session, limit=20)
+            cached = await list_recent_bias_events(
+                session, user_id=ctx.deps.user_id, limit=20
+            )
             stale = (
                 not cached
                 or (datetime.now(tz=UTC) - cached[0].detected_at) > timedelta(hours=24)
@@ -52,10 +54,12 @@ def register_bias_tool(agent: Agent[AgentDeps, object]) -> None:
             if force_recompute or stale:
                 await run_for_user(
                     session,
-                    user_id="me",
+                    user_id=ctx.deps.user_id,
                     lookback_days=_WINDOW_DAYS[window],
                 )
-                cached = await list_recent_bias_events(session, limit=20)
+                cached = await list_recent_bias_events(
+                    session, user_id=ctx.deps.user_id, limit=20
+                )
 
         out = [
             BiasFlagOut(

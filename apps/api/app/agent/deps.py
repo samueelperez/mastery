@@ -21,4 +21,5 @@ class AgentDeps:
 
     session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
     log: structlog.BoundLogger
+    user_id: str
     exchange: str = "binance_usdm"

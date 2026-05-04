@@ -31,13 +31,13 @@ def register_list_alerts_tool(agent: Agent[AgentDeps, object]) -> None:
                         SELECT id::text, name, spec, enabled, cooldown_s,
                                last_fired_at, created_at
                         FROM alert_rules
-                        WHERE user_id = 'me'
+                        WHERE user_id = :uid
                           AND (NOT :only_enabled OR enabled = true)
                         ORDER BY created_at DESC
                         LIMIT 50
                         """
                     ),
-                    {"only_enabled": only_enabled},
+                    {"uid": ctx.deps.user_id, "only_enabled": only_enabled},
                 )
             ).mappings().all()
 

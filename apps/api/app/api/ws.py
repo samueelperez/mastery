@@ -2,10 +2,12 @@
 
 Endpoints:
   /ws/market?symbol=BTCUSDT&tf=1m   - one JSON per kline tick from Binance
-  /ws/alerts?user_id=me             - one JSON per alert_event fired
+  /ws/alerts                        - one JSON per alert_event fired (auth-gated)
 
 Both follow the same pattern: subscribe to the Valkey channel, forward each
-message to the browser. The alerts channel is populated by `app.alerts.runtime`.
+message to the browser. The alerts channel is populated by `app.alerts.runtime`
+and scoped to the authenticated user — the user_id comes from the BetterAuth
+session cookie, not a query string.
 """
 
 from __future__ import annotations
@@ -15,14 +17,38 @@ import contextlib
 
 import orjson
 import structlog
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import text
 
 from app.alerts.runtime import alerts_channel
+from app.auth.session import SESSION_COOKIE_NAME, extract_session_token
 from app.broadcasting.pubsub import market_channel, subscribe
 from app.data.binance_adapter import EXCHANGE_NAME
+from app.db import session_scope
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
+
+
+async def _ws_user_id(websocket: WebSocket) -> str | None:
+    """Resolve the BetterAuth session cookie on a WebSocket. Same lookup as
+    the HTTP `resolve_user_id`, but reads from `websocket.cookies` and opens
+    its own short-lived session (FastAPI `Depends(session_dependency)` on a
+    websocket handler is awkward; this is simpler)."""
+    token = extract_session_token(websocket.cookies.get(SESSION_COOKIE_NAME))
+    if token is None:
+        return None
+    async with session_scope() as session:
+        row = (
+            await session.execute(
+                text(
+                    'SELECT "userId" FROM session '
+                    'WHERE token = :tok AND "expiresAt" > now() LIMIT 1'
+                ),
+                {"tok": token},
+            )
+        ).mappings().one_or_none()
+    return str(row["userId"]) if row else None
 
 
 @router.websocket("/ws/market")
@@ -63,16 +89,19 @@ async def market_ws(
 
 
 @router.websocket("/ws/alerts")
-async def alerts_ws(
-    websocket: WebSocket,
-    user_id: str = Query(default="me", min_length=1, max_length=64),
-) -> None:
+async def alerts_ws(websocket: WebSocket) -> None:
     """Fan-out for alert_events. The runtime publishes to
     `alerts:user:{user_id}` whenever a rule fires or a high-severity bias is
-    promoted; this endpoint forwards as `{type: 'alert_event', data: ...}`."""
+    promoted; this endpoint forwards as `{type: 'alert_event', data: ...}`.
+    user_id is resolved from the BetterAuth cookie, not query string."""
+    user_id = await _ws_user_id(websocket)
+    if user_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        log.info("ws.alerts.unauth")
+        return
     await websocket.accept()
     channel = alerts_channel(user_id)
-    log.info("ws.alerts.connect", channel=channel)
+    log.info("ws.alerts.connect", channel=channel, user_id=user_id)
 
     try:
         async with subscribe(channel) as pubsub:
