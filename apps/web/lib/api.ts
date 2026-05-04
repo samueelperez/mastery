@@ -2,12 +2,28 @@ import { env } from "@/lib/env"
 
 /** All API calls cross-origin (Next on :3001, FastAPI on :8000) so the
  * BetterAuth session cookie only rides along when `credentials: 'include'`
- * is set. Wrap fetch once instead of repeating it 12 times. */
+ * is set. Wrap fetch once instead of repeating it 12 times.
+ *
+ * Bonus: a stale cookie (session row deleted server-side) lets the Next
+ * middleware through but trips a 401 here. Auto-redirect to /auth/login so
+ * the user doesn't get stuck with a "401" toast on every refetch — the
+ * login page clears the stale cookie via authClient.signIn / signOut. */
 function apiFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
 ): Promise<Response> {
-  return fetch(input, { credentials: "include", ...init })
+  return fetch(input, { credentials: "include", ...init }).then((res) => {
+    if (res.status === 401 && typeof window !== "undefined") {
+      const here = window.location.pathname + window.location.search
+      // Avoid redirect loops if we're already on /auth/*
+      if (!here.startsWith("/auth")) {
+        window.location.assign(
+          `/auth/login?redirect=${encodeURIComponent(here)}`,
+        )
+      }
+    }
+    return res
+  })
 }
 
 export interface CandleDTO {
