@@ -24,6 +24,8 @@ const ITEMS: NavItem[] = [
 
 export function GlobalNav() {
   const pathname = usePathname()
+  // Auth pages own the full screen — no top nav.
+  if (pathname?.startsWith("/auth")) return null
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur sm:gap-4 sm:px-6">
       <Link
