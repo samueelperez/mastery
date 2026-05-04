@@ -22,16 +22,27 @@ RegimeLabel = Literal["trending_up", "trending_down", "ranging", "volatile_expan
 class ToolCitation(BaseModel):
     """Pointer to the tool call whose output backs a numeric claim.
 
-    `tool_call_id` must match an actual tool_call_id from the run trace; the
-    validator rejects fabricated IDs. `snapshot` is the relevant excerpt of the
-    tool's output (the actual number) so the UI can render it without re-fetching.
+    The validator discriminates by `tool_name` (LLMs can't reliably echo opaque
+    provider IDs like `toolu_vrtx_...`). For citations that reference a stable
+    handle in the tool output — `run_id` (run_backtest, get_strategy_metrics)
+    or `trade_ids` (get_similar_past_trades) — the validator additionally
+    checks that the cited handle was actually returned by a tool this turn.
     """
 
-    tool_call_id: str = Field(..., description="ID from the run trace; validator checks this.")
-    tool_name: str
+    tool_name: str = Field(
+        ...,
+        description="Literal function name you called this turn — discriminator.",
+    )
     snapshot: dict[str, Any] = Field(
         default_factory=dict,
-        description="Excerpt of the tool output: the value being cited (e.g. {'ema_55': 67234.1}).",
+        description=(
+            "Excerpt of the tool output: the value being cited "
+            "(e.g. {'ema_55': 67234.1} or {'run_id': '<uuid>', 'dsr': 0.7})."
+        ),
+    )
+    tool_call_id: str | None = Field(
+        default=None,
+        description="Optional, best-effort. UI uses it for grouping; validator does NOT check it.",
     )
 
 

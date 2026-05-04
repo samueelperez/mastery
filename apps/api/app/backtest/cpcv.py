@@ -17,7 +17,11 @@ import structlog
 from skfolio.model_selection import CombinatorialPurgedCV
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.backtest.metrics import compute_metrics, probability_of_overfit
+from app.backtest.metrics import (
+    annualization_factor_for,
+    compute_metrics,
+    probability_of_overfit,
+)
 from app.backtest.runner import BacktestSpec, run_backtest
 
 log = structlog.get_logger(__name__)
@@ -109,9 +113,14 @@ async def run_cpcv(
         trades=[t.model_dump() for t in full.trades],
         initial_equity=base_spec.initial_equity,
         n_trials=len(sharpes),
+        annualization_factor=annualization_factor_for(base_spec.timeframe),
     )
 
-    overfit = (full_metrics.deflated_sharpe < 0.5) or (pbo > 0.5)
+    # PBO from `probability_of_overfit` here is a proxy: we only run the
+    # strategy once and rank fold sub-samples (López de Prado §12.4 requires
+    # reconstructing N independent paths and ranking strategies between them).
+    # Until CPCV is reimplemented properly, gate `overfit_warning` on DSR only.
+    overfit = full_metrics.deflated_sharpe < 0.5
 
     log.info(
         "cpcv.done",

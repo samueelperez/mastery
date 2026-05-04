@@ -6,12 +6,13 @@ re-write overlapping ranges idempotently. The hypertable's PK
 """
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.tools._time import floor_to_timeframe
 from app.data.types import OHLCVCandle
 from app.storage.models import OHLCV
 
@@ -80,20 +81,32 @@ async def fetch_range(
     until: datetime | None = None,
     limit: int = 1000,
 ) -> Sequence[OHLCV]:
+    """Fetch closed candles in `[since, until]` oldest-first, capped at `limit`.
+
+    Defensive closed-candle filter: even though the live ingestor only persists
+    candles where `kline.is_closed == True`, we additionally clamp the upper
+    bound to `floor_to_timeframe(now, tf)` so that:
+      - if test fixtures or future ingestors slip in a forming candle, the
+        rules engine / backtest engine never sees it
+      - tools and indicators that compute on this output can rely on every
+        row representing a fully-closed bar
+    """
+    effective_until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
+    if until is not None and until < effective_until:
+        effective_until = until
     stmt = (
         select(OHLCV)
         .where(
             OHLCV.exchange == exchange,
             OHLCV.symbol == symbol,
             OHLCV.timeframe == timeframe,
+            OHLCV.ts < effective_until,
         )
         .order_by(OHLCV.ts.desc())
         .limit(limit)
     )
     if since is not None:
         stmt = stmt.where(OHLCV.ts >= since)
-    if until is not None:
-        stmt = stmt.where(OHLCV.ts <= until)
     result = await session.execute(stmt)
     rows = result.scalars().all()
     # Caller wants oldest-first for charting.

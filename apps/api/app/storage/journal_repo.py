@@ -139,8 +139,17 @@ async def update_summary_and_embedding(
     summary_hash: str,
     embedding: list[float],
     embedding_version: int,
-) -> None:
-    await session.execute(
+    expected_old_hash: str | None = None,
+) -> bool:
+    """Compare-and-swap update of a trade's embedded summary.
+
+    `expected_old_hash` is the summary_hash that was current when we computed
+    `embedding`. If the row has since changed (user edited mistakes, another
+    backfill ran), the UPDATE matches 0 rows and we return False — caller
+    should re-read and retry. Without this, embed_backfill can race against
+    log_trade / live edits and pin a stale embedding to a fresh summary_text.
+    """
+    result = await session.execute(
         text(
             """
             UPDATE journal_trades
@@ -149,6 +158,7 @@ async def update_summary_and_embedding(
                 embedding_version = :ver,
                 updated_at = now()
             WHERE id = CAST(:id AS uuid)
+              AND (:expected IS NULL OR summary_hash = :expected)
             """
         ),
         {
@@ -157,8 +167,10 @@ async def update_summary_and_embedding(
             "emb": _vector_literal(embedding),
             "ver": embedding_version,
             "id": trade_id,
+            "expected": expected_old_hash,
         },
     )
+    return (getattr(result, "rowcount", 0) or 0) > 0
 
 
 # -----------------------------------------------------------------------------

@@ -5,8 +5,11 @@ least the columns from `app.data.types.OHLCVCandle` (`o`, `h`, `l`, `c`, `v`, `t
 They return a LazyFrame extended with one or more new columns; original columns are
 preserved. Functions never mutate or remove the input columns.
 
-Closed-candle invariant: callers must filter `is_closed=True` before passing rows
-in. Indicators do not check this.
+Closed-candle invariant: rows passed in must represent fully-closed candles.
+Enforced upstream — `app.storage.ohlcv_repo.fetch_range` clamps the upper
+bound to `floor_to_timeframe(now, tf)`, and the live ingestor only persists
+candles with `kline.is_closed=True`. Indicators trust this invariant and do
+not re-check it.
 """
 
 from app.indicators.core import atr, ema, rsi, sma

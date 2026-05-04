@@ -23,7 +23,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools._time import floor_to_timeframe
-from app.backtest.metrics import StrategyMetrics, compute_metrics
+from app.backtest.metrics import (
+    StrategyMetrics,
+    annualization_factor_for,
+    compute_metrics,
+)
 from app.backtest.strategies import SignalFrame, get_strategy
 from app.storage.ohlcv_repo import fetch_range
 
@@ -78,6 +82,19 @@ class _OpenPosition:
     bars_held: int = 0
 
 
+@dataclass
+class _PendingSignal:
+    """A signal captured at the close of bar i, awaiting fill at the open of bar i+1.
+
+    `slip_dist` snapshots the stop_distance (≈ ATR × k) at signal-time; we use it
+    to size slippage rather than the next bar's ATR, since slippage is paid
+    crossing the spread at fill, not from future volatility.
+    """
+
+    fired: bool = False
+    slip_dist: float | None = None
+
+
 def _simulate(
     sigframe: SignalFrame,
     *,
@@ -87,12 +104,24 @@ def _simulate(
 ) -> tuple[list[Trade], list[tuple[datetime, float]]]:
     """Walk the candles in order; long-only; one position at a time.
 
+    **Execution convention** (commit ec9ba57's runner had close-to-close fill,
+    which silently took look-ahead by deciding AND filling on the same close).
+    The honest convention, paired with what F4 paper trading will do:
+
+      - At the close of bar `i` the strategy emits entry / exit / stop_distance.
+      - We CARRY that signal as a pending instruction.
+      - On the OPEN of bar `i+1` we fill: entry_px = opens[i+1] + slip,
+        exit_px = opens[i+1] - slip. Stop loss is the exception — it triggers
+        intra-bar at stop_px when `low <= stop_px`.
+
     Fees: bps applied to BOTH entry and exit notional.
-    Slippage: `slippage_atr * stop_distance` is added to entry_px and subtracted
-              from exit_px (we always cross the spread against ourselves).
+    Slippage: `slip = stop_distance × slippage_atr`. Same formula as before, but
+    `stop_distance` is locked at signal-time, not fill-time.
+    Last-bar trailing signals are dropped (no next bar to fill on).
     """
     df = sigframe.df
     ts = df["ts"].to_list()
+    opens = df["o"].to_list()
     closes = df["c"].to_list()
     lows = df["l"].to_list()
     entry_arr = sigframe.entry.to_list()
@@ -107,55 +136,56 @@ def _simulate(
     equity = initial_equity
     equity_curve: list[tuple[datetime, float]] = []
     open_pos: _OpenPosition | None = None
+    pending_entry = _PendingSignal()
+    pending_exit = _PendingSignal()
 
     for i in range(len(closes)):
-        # mark-to-market: equity at this bar reflects open position's unrealized PnL
+        # 1. Fill any entry signal pending from bar i-1 at this bar's open.
+        if open_pos is None and pending_entry.fired:
+            sd = pending_entry.slip_dist
+            slip = (sd or 0.0) * slippage_atr
+            entry_px = opens[i] + slip
+            stop_px = entry_px - sd if sd is not None and sd > 0 else None
+            equity -= initial_equity * fees_frac
+            open_pos = _OpenPosition(entry_ts=ts[i], entry_px=entry_px, stop_px=stop_px)
+            pending_entry = _PendingSignal()  # consumed
+
+        # 2. Mark-to-market for the equity curve.
         if open_pos is not None:
             unrealized = (closes[i] - open_pos.entry_px) / open_pos.entry_px * initial_equity
             equity_curve.append((ts[i], initial_equity + unrealized))
         else:
             equity_curve.append((ts[i], equity))
 
-        if open_pos is None:
-            if entry_arr[i]:
-                # apply slippage on entry
-                slip = (stop_dist_arr[i] or 0.0) * slippage_atr
-                entry_px = closes[i] + slip
-                stop_px = (
-                    entry_px - (stop_dist_arr[i] or 0.0)
-                    if stop_dist_arr[i] is not None
-                    else None
-                )
-                # apply fees on entry notional
-                equity -= initial_equity * fees_frac
-                open_pos = _OpenPosition(entry_ts=ts[i], entry_px=entry_px, stop_px=stop_px)
-        else:
+        # 3. Process exits on this bar — stop loss intra-bar, OR pending exit at open.
+        if open_pos is not None:
             open_pos.bars_held += 1
             exit_reason: Literal["signal", "stop"] | None = None
+            fill_px: float = 0.0
 
-            # stop check first: if low pierces the stop, fill at stop_px
             if open_pos.stop_px is not None and lows[i] <= open_pos.stop_px:
+                # Intra-bar stop fill at stop_px (no slippage modelled past the stop;
+                # binance USDM stops fill at stop trigger price for stop-market orders).
                 fill_px = open_pos.stop_px
                 exit_reason = "stop"
-            elif exit_arr[i]:
-                slip = (stop_dist_arr[i] or 0.0) * slippage_atr
-                fill_px = closes[i] - slip
+            elif pending_exit.fired:
+                sd = pending_exit.slip_dist
+                slip = (sd or 0.0) * slippage_atr
+                fill_px = opens[i] - slip
                 exit_reason = "signal"
+            pending_exit = _PendingSignal()  # whether triggered or staled by stop, drop
 
             if exit_reason is not None:
-                # apply fees on exit notional
                 equity -= initial_equity * fees_frac
                 ret = (fill_px - open_pos.entry_px) / open_pos.entry_px
                 pnl = initial_equity * ret
                 equity += pnl
-                # R-multiple: pnl / risk-per-trade. Risk approximated as
-                # initial_equity * |entry - stop| / entry, falling back to 1.
                 if open_pos.stop_px is not None and open_pos.stop_px < open_pos.entry_px:
                     risk_frac = (open_pos.entry_px - open_pos.stop_px) / open_pos.entry_px
                     risk = initial_equity * risk_frac
                     r_mult = pnl / risk if risk > 0 else 0.0
                 else:
-                    r_mult = ret * 100.0  # no stop → use raw return × 100 as proxy
+                    r_mult = ret * 100.0  # no stop → raw return × 100 as proxy
 
                 trades.append(
                     Trade(
@@ -171,6 +201,12 @@ def _simulate(
                     )
                 )
                 open_pos = None
+
+        # 4. Capture this bar's signal at close for the NEXT bar's open fill.
+        if open_pos is None and entry_arr[i]:
+            pending_entry = _PendingSignal(fired=True, slip_dist=stop_dist_arr[i])
+        elif open_pos is not None and exit_arr[i]:
+            pending_exit = _PendingSignal(fired=True, slip_dist=stop_dist_arr[i])
 
     return trades, equity_curve
 
@@ -229,6 +265,7 @@ async def run_backtest(
     metrics = compute_metrics(
         equity_curve=equity, trades=[t.model_dump() for t in trades],
         initial_equity=spec.initial_equity, n_trials=1,
+        annualization_factor=annualization_factor_for(spec.timeframe),
     )
 
     run_id = str(uuid.uuid4())

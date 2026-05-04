@@ -57,5 +57,11 @@ def build_summary_text(t: TradeSummaryInput) -> str:
 
 
 def hash_summary(text: str) -> str:
-    """Stable hash for staleness detection. Stored in journal_trades.summary_hash."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    """Stable hash for staleness detection. Stored in journal_trades.summary_hash.
+
+    Whitespace-normalized so that purely cosmetic edits (e.g., user adds an extra
+    space to `mistakes`) don't trigger a redundant re-embed. Anything that
+    actually changes meaning still produces a different hash.
+    """
+    normalized = " ".join(text.split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()

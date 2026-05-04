@@ -13,14 +13,18 @@ the best of N random tries".
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.backtest.metrics import StrategyMetrics
-from app.backtest.runner import BacktestSpec, run_backtest
+from app.backtest.metrics import (
+    StrategyMetrics,
+    annualization_factor_for,
+    compute_metrics,
+)
+from app.backtest.runner import BacktestSpec, Trade, run_backtest
 
 log = structlog.get_logger(__name__)
 
@@ -34,6 +38,8 @@ class WalkForwardFold:
     out_sample_end: datetime
     metrics: StrategyMetrics
     n_trades: int
+    equity_curve: list[tuple[datetime, float]] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
 
 
 @dataclass
@@ -97,12 +103,18 @@ async def run_walk_forward(
                 out_sample_end=oos_end,
                 metrics=result.metrics,
                 n_trades=len(result.trades),
+                equity_curve=result.equity_curve,
+                trades=result.trades,
             )
         )
         fold_idx += 1
         is_start = is_start + oos_delta  # roll, not anchored
 
-    # Aggregate OOS: stitch equity curves end-to-end, recompute
+    # Aggregate OOS: stitch each fold's equity curve into one continuous series
+    # (each fold restarts at initial_equity, so we rescale forward) then run
+    # `compute_metrics` once on the stitched curve. This gives REAL DSR / PSR /
+    # skew / kurt / max_dd over the union of OOS — not per-fold averages, which
+    # is incoherent for non-linear stats like DSR.
     if not folds:
         agg = StrategyMetrics(
             n_trades=0, win_rate=0, avg_win_R=0, avg_loss_R=0, expectancy_R=0,
@@ -111,25 +123,32 @@ async def run_walk_forward(
             probabilistic_sharpe=0.5, deflated_sharpe=0, overfit_warning=True,
         )
     else:
-        # Average per-fold metrics (simple aggregator; UI can show per-fold detail)
-        n_total = sum(f.n_trades for f in folds)
-        avg_sharpe = sum(f.metrics.sharpe for f in folds) / len(folds)
-        avg_dsr = sum(f.metrics.deflated_sharpe for f in folds) / len(folds)
-        worst_dd = max(f.metrics.max_drawdown for f in folds)
-        agg = StrategyMetrics(
-            n_trades=n_total,
-            win_rate=sum(f.metrics.win_rate * f.n_trades for f in folds) / max(n_total, 1),
-            avg_win_R=0.0, avg_loss_R=0.0,
-            expectancy_R=sum(f.metrics.expectancy_R * f.n_trades for f in folds) / max(n_total, 1),
-            sharpe=round(avg_sharpe, 4),
-            sortino=0.0,
-            max_drawdown=round(worst_dd, 4),
-            max_drawdown_duration_bars=max((f.metrics.max_drawdown_duration_bars for f in folds), default=0),
-            calmar=0.0, mar=0.0, ulcer_index=0.0, tail_ratio=0.0, skew=0.0, kurtosis=0.0,
-            probabilistic_sharpe=0.5,
-            deflated_sharpe=round(avg_dsr, 4),
-            overfit_warning=avg_dsr < 0.5,
+        stitched_curve: list[tuple[datetime, float]] = []
+        running = base_spec.initial_equity
+        for f in folds:
+            fold_curve = f.equity_curve
+            if not fold_curve:
+                continue
+            fold_initial = fold_curve[0][1]
+            if fold_initial <= 0:
+                continue
+            for ts_, eq in fold_curve:
+                stitched_curve.append((ts_, running * eq / fold_initial))
+            running = stitched_curve[-1][1]
+
+        all_trades = [t.model_dump() for f in folds for t in f.trades]
+        agg = compute_metrics(
+            equity_curve=stitched_curve,
+            trades=all_trades,
+            initial_equity=base_spec.initial_equity,
+            n_trials=len(folds),  # number of OOS folds we actually evaluated
+            annualization_factor=annualization_factor_for(base_spec.timeframe),
         )
 
-    log.info("walk_forward.done", n_folds=len(folds), avg_dsr=agg.deflated_sharpe)
+    log.info(
+        "walk_forward.done",
+        n_folds=len(folds),
+        agg_dsr=agg.deflated_sharpe,
+        agg_sharpe=agg.sharpe,
+    )
     return WalkForwardResult(folds=folds, aggregate_oos_metrics=agg)

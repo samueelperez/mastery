@@ -46,6 +46,10 @@ class BiasFlag(BaseModel):
 async def _fetch_recent_trades(
     session: AsyncSession, *, user_id: str, since: datetime
 ) -> pl.DataFrame:
+    # F2 detectors are calibrated to discretionary human trading. We exclude
+    # `paper` and `live` modes to keep automated bot trades from triggering
+    # spam alerts when F4 paper trading lands. Only rate trades the human
+    # actively logged or imported from a CSV of past discretionary work.
     rows = (
         await session.execute(
             text(
@@ -54,6 +58,7 @@ async def _fetch_recent_trades(
                        setup_tag, regime
                 FROM journal_trades
                 WHERE user_id = :uid AND trade_ts >= :since
+                  AND mode IN ('manual_log', 'csv_import')
                 ORDER BY trade_ts ASC
                 """
             ),

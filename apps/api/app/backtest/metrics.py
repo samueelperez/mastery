@@ -26,6 +26,22 @@ from pydantic import BaseModel, Field
 ANNUALIZATION_FACTOR_DEFAULT = math.sqrt(252)  # daily; runner overrides per-tf
 
 
+# Crypto trades 24/7 — no exchange close — so we annualize on actual hours.
+_BARS_PER_YEAR: dict[str, float] = {
+    "1m": 60 * 24 * 365,
+    "5m": 12 * 24 * 365,
+    "15m": 4 * 24 * 365,
+    "1h": 24 * 365,
+    "4h": 6 * 365,
+    "1d": 365,
+}
+
+
+def annualization_factor_for(timeframe: str) -> float:
+    """sqrt(bars_per_year) for the given timeframe; falls back to √252 (daily-equiv)."""
+    return math.sqrt(_BARS_PER_YEAR.get(timeframe, 252))
+
+
 class StrategyMetrics(BaseModel):
     """All numbers the agent and UI cite. JSON-friendly."""
 
@@ -35,7 +51,10 @@ class StrategyMetrics(BaseModel):
     avg_loss_R: float
     expectancy_R: float
     sharpe: float
-    sortino: float
+    sortino: float | None = Field(
+        default=None,
+        description="None when there are no losing returns (sortino would be infinite).",
+    )
     max_drawdown: float = Field(..., ge=0.0, le=1.0)
     max_drawdown_duration_bars: int
     calmar: float
@@ -71,12 +90,15 @@ def _sharpe_from_returns(rets: np.ndarray, ann: float = ANNUALIZATION_FACTOR_DEF
     return float(rets.mean() / rets.std(ddof=1) * ann)
 
 
-def _sortino_from_returns(rets: np.ndarray, ann: float = ANNUALIZATION_FACTOR_DEFAULT) -> float:
+def _sortino_from_returns(
+    rets: np.ndarray, ann: float = ANNUALIZATION_FACTOR_DEFAULT
+) -> float | None:
+    """Return None when there are no losing returns (sortino is then undefined)."""
     if rets.size < 2:
         return 0.0
     downside = rets[rets < 0]
     if downside.size == 0:
-        return float("inf")
+        return None
     dd = downside.std(ddof=1)
     if dd == 0:
         return 0.0
@@ -289,7 +311,7 @@ def compute_metrics(
         avg_loss_R=round(avg_loss, 4),
         expectancy_R=round(expectancy, 4),
         sharpe=round(sharpe, 4),
-        sortino=round(sortino, 4) if not math.isinf(sortino) else 99.0,
+        sortino=round(sortino, 4) if sortino is not None else None,
         max_drawdown=round(max_dd, 4),
         max_drawdown_duration_bars=max_dd_dur,
         calmar=round(calmar, 4),
