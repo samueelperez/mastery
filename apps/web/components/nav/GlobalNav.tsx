@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 
 import { AlertBell } from "./AlertBell"
 import { ConnectionPill } from "./ConnectionPill"
+import { UserMenu } from "./UserMenu"
 
 interface NavItem {
   href: string
@@ -59,6 +60,7 @@ export function GlobalNav() {
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <AlertBell />
         <ConnectionPill />
+        <UserMenu />
       </div>
     </header>
   )
