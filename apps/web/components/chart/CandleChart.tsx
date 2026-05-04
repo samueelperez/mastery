@@ -44,15 +44,23 @@ export function CandleChart({ initial, live, className }: CandleChartProps) {
     if (!containerRef.current) return
 
     // Pull live token values from the document so the chart matches whatever
-    // globals.css (.dark) defines. Falls back to slate-ish defaults if a var
-    // is missing for any reason.
+    // globals.css (.dark) defines. Browsers may return computed colors as
+    // `lab(…)` / `oklch(…)` which Lightweight Charts can't parse, so we run
+    // each value through a canvas — `ctx.fillStyle` accepts any CSS color and
+    // normalizes it back to `#rrggbb` or `rgba(…)`.
+    const probe = document.createElement("canvas").getContext("2d")
     const cs = getComputedStyle(document.documentElement)
-    const token = (name: string, fallback: string) =>
-      cs.getPropertyValue(name).trim() || fallback
-    const fg = token("--color-foreground", "oklch(0.984 0.003 247.858)")
-    const border = token("--color-border", "oklch(0.372 0.044 257.287)")
-    const success = token("--color-success", "oklch(0.696 0.17 162.48)")
-    const destructive = token("--color-destructive", "oklch(0.637 0.237 25.331)")
+    const token = (name: string, fallback: string): string => {
+      const raw = cs.getPropertyValue(name).trim() || fallback
+      if (!probe) return fallback
+      probe.fillStyle = "#000"
+      probe.fillStyle = raw
+      return probe.fillStyle as string
+    }
+    const fg = token("--color-foreground", "#f8fafc")
+    const border = token("--color-border", "#334155")
+    const success = token("--color-success", "#10b981")
+    const destructive = token("--color-destructive", "#ef4444")
 
     const chart = createChart(containerRef.current, {
       autoSize: true,
