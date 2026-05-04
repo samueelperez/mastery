@@ -44,19 +44,33 @@ export function CandleChart({ initial, live, className }: CandleChartProps) {
     if (!containerRef.current) return
 
     // Pull live token values from the document so the chart matches whatever
-    // globals.css (.dark) defines. Browsers may return computed colors as
-    // `lab(…)` / `oklch(…)` which Lightweight Charts can't parse, so we run
-    // each value through a canvas — `ctx.fillStyle` accepts any CSS color and
-    // normalizes it back to `#rrggbb` or `rgba(…)`.
-    const probe = document.createElement("canvas").getContext("2d")
-    const cs = getComputedStyle(document.documentElement)
-    const token = (name: string, fallback: string): string => {
-      const raw = cs.getPropertyValue(name).trim() || fallback
+    // globals.css (.dark) defines. Browsers normalize `oklch(…)` to `lab(…)`
+    // in getComputedStyle and `ctx.fillStyle` preserves the color space —
+    // Lightweight Charts can't parse either. The reliable fix is to actually
+    // RASTERIZE a 1×1 pixel and read the RGBA bytes back; that always returns
+    // honest sRGB integers regardless of the source color space.
+    const probeCanvas = document.createElement("canvas")
+    probeCanvas.width = 1
+    probeCanvas.height = 1
+    const probe = probeCanvas.getContext("2d", { willReadFrequently: true })
+    const toRgb = (cssValue: string, fallback: string): string => {
       if (!probe) return fallback
-      probe.fillStyle = "#000"
-      probe.fillStyle = raw
-      return probe.fillStyle as string
+      probe.clearRect(0, 0, 1, 1)
+      try {
+        probe.fillStyle = cssValue
+      } catch {
+        return fallback
+      }
+      probe.fillRect(0, 0, 1, 1)
+      const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data
+      if (a === 255) {
+        return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+      }
+      return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`
     }
+    const cs = getComputedStyle(document.documentElement)
+    const token = (name: string, fallback: string): string =>
+      toRgb(cs.getPropertyValue(name).trim() || fallback, fallback)
     const fg = token("--color-foreground", "#f8fafc")
     const border = token("--color-border", "#334155")
     const success = token("--color-success", "#10b981")
