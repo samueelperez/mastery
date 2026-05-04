@@ -2,21 +2,27 @@
 persist closed candles to Postgres.
 
 Started by FastAPI's lifespan. One asyncio task per (symbol, timeframe) pair.
-For F0 we hardcode BTCUSDT @ 1m and 1h; F1 will accept a config-driven set.
+On startup, every pair runs `_fill_gap` first — if the API was offline for a
+stretch (dev restart, deploy), the WS only catches NEW closes; the gap between
+the last persisted candle and `floor_to_timeframe(now, tf)` would otherwise
+appear as a hole forever (live ingest never looks backwards).
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+from datetime import UTC, datetime
 
 import structlog
 
+from app.agent.tools._time import floor_to_timeframe
 from app.broadcasting.pubsub import market_channel, publish_json
 from app.data.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.data.exchange_context import ExchangeContext
+from app.data.normalizer import timeframe_delta
 from app.db import session_scope
-from app.storage.ohlcv_repo import upsert_one
+from app.storage.ohlcv_repo import bulk_upsert, last_ts, upsert_one
 
 log = structlog.get_logger(__name__)
 
@@ -81,6 +87,68 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
             await asyncio.sleep(2.0)  # backoff before reconnect
 
 
+async def _fill_gap(
+    adapter: BinanceAdapter, symbol: str, timeframe: str
+) -> int:
+    """Page-fetch any candles missing between the last persisted one and now.
+
+    Runs once per (symbol, tf) at lifespan startup. If the series is empty
+    (fresh DB) we leave it alone — the user should run the dedicated
+    `app.ingestion.backfill` CLI for the initial 2y backfill instead of
+    trying to do it here at boot.
+
+    Returns the number of newly inserted candles.
+    """
+    delta = timeframe_delta(timeframe)
+    floor_now = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
+
+    async with session_scope() as session:
+        latest = await last_ts(
+            session, exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe
+        )
+    if latest is None:
+        log.info(
+            "ingest.gap_fill.skip_empty_series", symbol=symbol, timeframe=timeframe
+        )
+        return 0
+    # Next missing candle starts one delta after the last persisted one.
+    gap_start = latest + delta
+    if gap_start >= floor_now:
+        return 0  # no gap
+
+    log.info(
+        "ingest.gap_fill.start",
+        symbol=symbol,
+        timeframe=timeframe,
+        from_=gap_start.isoformat(),
+        to=floor_now.isoformat(),
+    )
+    cursor_ms = int(gap_start.timestamp() * 1000)
+    end_ms = int(floor_now.timestamp() * 1000)
+    inserted = 0
+    while cursor_ms < end_ms:
+        candles = await adapter.fetch_ohlcv_page(
+            symbol, timeframe, since_ms=cursor_ms, limit=1000
+        )
+        if not candles:
+            break
+        async with session_scope() as session:
+            inserted += await bulk_upsert(session, candles)
+        last_candle_ts = candles[-1].ts
+        new_cursor = int(last_candle_ts.timestamp() * 1000) + int(delta.total_seconds() * 1000)
+        if new_cursor <= cursor_ms:
+            break  # no progress; bail
+        cursor_ms = new_cursor
+
+    log.info(
+        "ingest.gap_fill.done",
+        symbol=symbol,
+        timeframe=timeframe,
+        inserted=inserted,
+    )
+    return inserted
+
+
 class LiveIngestion:
     """Lifecycle owner. Call `start()` from FastAPI lifespan startup, and
     `stop()` on shutdown.
@@ -94,6 +162,17 @@ class LiveIngestion:
         if self._adapter is not None:
             return
         self._adapter = BinanceAdapter(ExchangeContext.MAINNET_RO)
+        # Close any gap from the previous shutdown BEFORE the WS subscriptions
+        # take over — the WS only delivers NEW closes, never replays the past.
+        # Run pairs in parallel; bulk_upsert is idempotent so any race with
+        # the WS spawning below is safe (ON CONFLICT DO NOTHING).
+        results = await asyncio.gather(
+            *(_fill_gap(self._adapter, symbol, tf) for symbol, tf in WATCH_LIST),
+            return_exceptions=True,
+        )
+        total_filled = sum(r for r in results if isinstance(r, int))
+        log.info("ingest.gap_fill.total", inserted=total_filled)
+
         for symbol, tf in WATCH_LIST:
             t = asyncio.create_task(
                 _watch_loop(self._adapter, symbol, tf),

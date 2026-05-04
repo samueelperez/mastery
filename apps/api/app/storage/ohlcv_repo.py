@@ -132,3 +132,24 @@ async def count_rows(
         )
     )
     return int((await session.execute(stmt)).scalar_one())
+
+
+async def last_ts(
+    session: AsyncSession,
+    *,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+) -> datetime | None:
+    """Most recent persisted candle timestamp, or None if the series is empty."""
+    from sqlalchemy import func
+
+    stmt = (
+        select(func.max(OHLCV.ts))
+        .where(
+            OHLCV.exchange == exchange,
+            OHLCV.symbol == symbol,
+            OHLCV.timeframe == timeframe,
+        )
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
