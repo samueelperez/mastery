@@ -23,6 +23,7 @@ import { DefaultChatTransport, type DynamicToolUIPart, type ToolUIPart } from "a
 import { BotIcon } from "lucide-react"
 import { useState } from "react"
 
+import { AlertCreatedCard, type AlertCreatedToolOutput } from "./AlertCreatedCard"
 import { BacktestResultCard, type BacktestToolOutput } from "./BacktestResultCard"
 import { ReasoningPart } from "./parts/ReasoningPart"
 import { SourcesStrip, type SourceItem } from "./parts/SourcePart"
@@ -39,6 +40,20 @@ function isBacktestOutput(value: unknown): value is BacktestToolOutput {
     typeof v.deflated_sharpe === "number" &&
     typeof v.sharpe === "number" &&
     typeof v.max_drawdown === "number"
+  )
+}
+
+function isAlertCreatedOutput(value: unknown): value is AlertCreatedToolOutput {
+  if (!value || typeof value !== "object") return false
+  const v = value as Record<string, unknown>
+  if (typeof v.alert_id !== "string" || typeof v.name !== "string") return false
+  if (typeof v.cooldown_s !== "number") return false
+  const spec = v.spec as Record<string, unknown> | undefined
+  if (!spec || typeof spec !== "object") return false
+  return (
+    typeof spec.symbol === "string" &&
+    typeof spec.timeframe === "string" &&
+    Array.isArray(spec.conditions)
   )
 }
 
@@ -157,6 +172,18 @@ export function CopilotChat({ className }: CopilotChatProps) {
                       sources.push({
                         id: `tool-${toolPart.toolCallId ?? idx}`,
                         title: "run backtest",
+                      })
+                    } else if (
+                      toolName === "create_alert" &&
+                      toolPart.state === "output-available" &&
+                      isAlertCreatedOutput(toolPart.output)
+                    ) {
+                      rendered.push(
+                        <AlertCreatedCard key={key} output={toolPart.output} />,
+                      )
+                      sources.push({
+                        id: `tool-${toolPart.toolCallId ?? idx}`,
+                        title: "create alert",
                       })
                     } else {
                       rendered.push(<ToolPart key={key} part={toolPart} />)

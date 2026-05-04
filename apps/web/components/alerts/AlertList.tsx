@@ -1,0 +1,129 @@
+"use client"
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { CheckIcon, MinusIcon, PowerIcon } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
+import {
+  type AlertConditionDTO,
+  type AlertRuleDTO,
+  fetchAlerts,
+  patchAlert,
+} from "@/lib/api"
+
+function summarizeConditions(conds: AlertConditionDTO[], logic: "all" | "any"): string {
+  const parts = conds.map((c) => `${c.left} ${c.op} ${c.right}`)
+  if (parts.length === 1) return parts[0]
+  return parts.join(logic === "all" ? " AND " : " OR ")
+}
+
+function shortDate(ts: string | null): string {
+  if (!ts) return "—"
+  const d = new Date(ts)
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`
+}
+
+export function AlertList() {
+  const qc = useQueryClient()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["alerts"],
+    queryFn: ({ signal }) => fetchAlerts({ signal }),
+  })
+  const toggle = useMutation({
+    mutationFn: (rule: AlertRuleDTO) =>
+      patchAlert(rule.id, { enabled: !rule.enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  })
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    )
+  }
+  if (error) return <p className="text-xs text-destructive">{String(error)}</p>
+  if (!data || data.length === 0) {
+    return (
+      <Card className="border-dashed border-border bg-card/20 p-6 text-center">
+        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+          no alerts yet
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Pídele al copiloto:{" "}
+          <span className="font-mono text-foreground">
+            &ldquo;alértame cuando BTCUSDT 4h cierre con RSI(14)&le;30&rdquo;
+          </span>
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full min-w-[40rem] text-xs">
+        <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">name</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">symbol</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">tf</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">condition</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-right font-medium">last fired</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-left font-medium">status</th>
+            <th className="px-3 py-2 pointer-coarse:py-4 text-right font-medium" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/30">
+          {data.map((r) => (
+            <tr
+              key={r.id}
+              className={cn(
+                "transition-colors duration-150 ease-out hover:bg-accent/10",
+                !r.enabled && "opacity-60",
+              )}
+            >
+              <td className="px-3 py-2 pointer-coarse:py-4 font-mono text-foreground">
+                {r.name}
+              </td>
+              <td className="px-3 py-2 pointer-coarse:py-4">{r.spec.symbol}</td>
+              <td className="px-3 py-2 pointer-coarse:py-4">{r.spec.timeframe}</td>
+              <td className="px-3 py-2 pointer-coarse:py-4 font-mono text-[11px] text-muted-foreground">
+                {summarizeConditions(r.spec.conditions, r.spec.logic)}
+              </td>
+              <td className="px-3 py-2 pointer-coarse:py-4 text-right font-mono tabular-nums">
+                {shortDate(r.last_fired_at)}
+              </td>
+              <td className="px-3 py-2 pointer-coarse:py-4">
+                {r.enabled ? (
+                  <Badge variant="secondary" className="gap-1">
+                    <CheckIcon className="size-3" />
+                    enabled
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1 text-muted-foreground">
+                    <MinusIcon className="size-3" />
+                    disabled
+                  </Badge>
+                )}
+              </td>
+              <td className="px-3 py-2 pointer-coarse:py-4 text-right">
+                <button
+                  type="button"
+                  onClick={() => toggle.mutate(r)}
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent/20 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-1"
+                  aria-label={r.enabled ? "disable alert" : "enable alert"}
+                >
+                  <PowerIcon className="size-3.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}

@@ -32,3 +32,24 @@ export function connectMarketWs(
   // Defaults: max 30 retry attempts, exponential backoff up to ~30s, message buffering.
   return new ReconnectingWebSocket(url)
 }
+
+/** Backend envelope from /ws/alerts. `data` matches alert_events row + rule context. */
+export type AlertWsMessage =
+  | { type: "subscribed"; channel: string }
+  | { type: "ping" }
+  | { type: "alert_event"; data: AlertEventPayload }
+
+export interface AlertEventPayload {
+  event_id: number
+  rule_id: string | null
+  rule_name: string
+  fired_at: string
+  kind: "rule_match" | "bias_promoted"
+  severity: "low" | "medium" | "high"
+  snapshot: Record<string, unknown>
+}
+
+export function connectAlertsWs(userId = "me"): ReconnectingWebSocket {
+  const url = `${env.wsUrl}/ws/alerts?user_id=${encodeURIComponent(userId)}`
+  return new ReconnectingWebSocket(url)
+}

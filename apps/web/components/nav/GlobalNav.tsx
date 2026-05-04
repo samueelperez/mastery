@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react"
+import { BellRingIcon, FlaskConicalIcon, MessageSquareIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+import { AlertBell } from "./AlertBell"
 import { ConnectionPill } from "./ConnectionPill"
 
 interface NavItem {
@@ -18,6 +19,7 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { href: "/", label: "chat", icon: MessageSquareIcon, exact: true },
   { href: "/research", label: "research", icon: FlaskConicalIcon },
+  { href: "/alerts", label: "alerts", icon: BellRingIcon },
 ]
 
 export function GlobalNav() {
@@ -52,7 +54,8 @@ export function GlobalNav() {
           )
         })}
       </nav>
-      <div className="ml-auto flex items-center">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <AlertBell />
         <ConnectionPill />
       </div>
     </header>

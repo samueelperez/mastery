@@ -177,3 +177,108 @@ export async function fetchJournalTrade(
   if (!res.ok) throw new Error(`fetchJournalTrade failed: ${res.status}`)
   return (await res.json()) as JournalTradeDetailDTO
 }
+
+// -----------------------------------------------------------------------------
+// Alerts (F3)
+// -----------------------------------------------------------------------------
+
+export interface AlertConditionDTO {
+  left: string
+  op: "<" | "<=" | "==" | ">=" | ">" | "cross_above" | "cross_below"
+  right: number | string
+}
+
+export interface AlertSpecDTO {
+  kind: "candle_close"
+  symbol: string
+  timeframe: "15m" | "1h" | "4h" | "1d"
+  indicators: { name: string; length?: number; source?: string }[]
+  conditions: AlertConditionDTO[]
+  logic: "all" | "any"
+}
+
+export interface AlertRuleDTO {
+  id: string
+  name: string
+  spec: AlertSpecDTO
+  enabled: boolean
+  cooldown_s: number
+  last_fired_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertEventDTO {
+  id: number
+  rule_id: string | null
+  kind: "rule_match" | "bias_promoted"
+  severity: "low" | "medium" | "high"
+  fired_at: string
+  snapshot: Record<string, unknown>
+  seen_at: string | null
+}
+
+export async function fetchAlerts(
+  opts: { only_enabled?: boolean; signal?: AbortSignal } = {},
+): Promise<AlertRuleDTO[]> {
+  const params = new URLSearchParams()
+  if (opts.only_enabled) params.set("only_enabled", "true")
+  const res = await fetch(`${env.apiUrl}/alerts?${params}`, { signal: opts.signal })
+  if (!res.ok) throw new Error(`fetchAlerts failed: ${res.status}`)
+  return (await res.json()) as AlertRuleDTO[]
+}
+
+export async function createAlert(
+  body: { name: string; spec: AlertSpecDTO; cooldown_s?: number },
+): Promise<AlertRuleDTO> {
+  const res = await fetch(`${env.apiUrl}/alerts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`createAlert failed: ${res.status}`)
+  return (await res.json()) as AlertRuleDTO
+}
+
+export async function patchAlert(
+  id: string,
+  body: { enabled?: boolean; cooldown_s?: number },
+): Promise<AlertRuleDTO> {
+  const res = await fetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`patchAlert failed: ${res.status}`)
+  return (await res.json()) as AlertRuleDTO
+}
+
+export async function deleteAlert(id: string): Promise<void> {
+  const res = await fetch(`${env.apiUrl}/alerts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+  if (!res.ok && res.status !== 204) throw new Error(`deleteAlert failed: ${res.status}`)
+}
+
+export async function fetchAlertEvents(
+  opts: { only_unread?: boolean; limit?: number; signal?: AbortSignal } = {},
+): Promise<AlertEventDTO[]> {
+  const params = new URLSearchParams()
+  if (opts.only_unread) params.set("only_unread", "true")
+  if (opts.limit) params.set("limit", String(opts.limit))
+  const res = await fetch(`${env.apiUrl}/alerts/events?${params}`, {
+    signal: opts.signal,
+  })
+  if (!res.ok) throw new Error(`fetchAlertEvents failed: ${res.status}`)
+  return (await res.json()) as AlertEventDTO[]
+}
+
+export async function markEventSeen(eventId: number): Promise<void> {
+  const res = await fetch(
+    `${env.apiUrl}/alerts/events/${eventId}/seen`,
+    { method: "POST" },
+  )
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`markEventSeen failed: ${res.status}`)
+  }
+}
