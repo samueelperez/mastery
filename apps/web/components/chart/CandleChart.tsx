@@ -1,6 +1,14 @@
 "use client"
 
-import { CandlestickSeries, ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts"
+import {
+  CandlestickSeries,
+  ColorType,
+  CrosshairMode,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type Time,
+} from "lightweight-charts"
 import { useEffect, useRef } from "react"
 
 import type { CandleDTO } from "@/lib/api"
@@ -93,7 +101,9 @@ export function CandleChart({ initial, live, className }: CandleChartProps) {
         timeVisible: true,
         secondsVisible: false,
       },
-      crosshair: { mode: 1 },
+      // Free crosshair — Normal mode lets the line follow the cursor anywhere
+      // on the canvas (Magnet mode would snap horizontally to the nearest bar).
+      crosshair: { mode: CrosshairMode.Normal },
     })
 
     const series = chart.addSeries(CandlestickSeries, {
