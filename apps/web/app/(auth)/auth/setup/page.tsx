@@ -12,20 +12,16 @@ export const dynamic = "force-dynamic"
 /** First-user bootstrap. Self-destructs once any row exists in `"user"` so the
  * route can't be used as an open registration backdoor. Server component:
  * the count check runs on Node, the form is the only client surface. */
-function shouldUseSsl(url: string | undefined): boolean {
+function isLocalDb(url: string | undefined): boolean {
   if (!url) return false
-  if (/sslmode=require/i.test(url)) return true
-  if (/localhost|127\.0\.0\.1|::1/i.test(url)) return false
-  if (/\.railway\.|\.rlwy\.net|\.neon\.tech|\.supabase\.co|\.aws\./i.test(url))
-    return true
-  return process.env.NODE_ENV === "production"
+  return /localhost|127\.0\.0\.1|::1|host\.docker\.internal/i.test(url)
 }
 
 async function userCount(): Promise<number> {
   const url = process.env.DATABASE_URL
   const pool = new Pool({
     connectionString: url,
-    ssl: shouldUseSsl(url) ? { rejectUnauthorized: false } : undefined,
+    ssl: isLocalDb(url) ? false : { rejectUnauthorized: false },
   })
   try {
     const { rows } = await pool.query<{ n: string }>(

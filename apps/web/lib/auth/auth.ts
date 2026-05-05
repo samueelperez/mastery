@@ -13,20 +13,16 @@ const googleEnabled = Boolean(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
 )
 
-/** Railway / Neon / Supabase hosted Postgres requieren SSL pero usan certs
- *  managed (a veces self-signed). En local (docker-compose) no hay SSL.
- *  La heurística: si la connection string apunta a un host *.railway.app /
- *  *.rlwy.net / *.neon.tech / *.supabase.co o trae sslmode=require, usamos
- *  SSL con rejectUnauthorized=false. Si es localhost, sin SSL. */
-function shouldUseSsl(url: string | undefined): boolean {
+/** Regla simple: SI la URL apunta a localhost → sin SSL (docker-compose).
+ *  En cualquier otro caso → SSL con rejectUnauthorized=false. Esto cubre
+ *  Railway / Neon / Supabase / RDS / cualquier hosted Postgres sin tener
+ *  que mantener una whitelist frágil de dominios.
+ *
+ *  rejectUnauthorized=false acepta certs self-signed o managed por el
+ *  provider — necesario porque Railway no expone su CA pública. */
+function isLocalDb(url: string | undefined): boolean {
   if (!url) return false
-  if (/sslmode=require/i.test(url)) return true
-  if (/localhost|127\.0\.0\.1|::1/i.test(url)) return false
-  // Hosted providers conocidos.
-  if (/\.railway\.|\.rlwy\.net|\.neon\.tech|\.supabase\.co|\.aws\./i.test(url))
-    return true
-  // Default seguro en producción: si NODE_ENV === production, asume SSL.
-  return process.env.NODE_ENV === "production"
+  return /localhost|127\.0\.0\.1|::1|host\.docker\.internal/i.test(url)
 }
 
 const databaseUrl = process.env.DATABASE_URL
@@ -34,9 +30,9 @@ const databaseUrl = process.env.DATABASE_URL
 export const auth = betterAuth({
   database: new Pool({
     connectionString: databaseUrl,
-    ssl: shouldUseSsl(databaseUrl)
-      ? { rejectUnauthorized: false }
-      : undefined,
+    ssl: isLocalDb(databaseUrl)
+      ? false
+      : { rejectUnauthorized: false },
   }),
   emailAndPassword: {
     enabled: true,
