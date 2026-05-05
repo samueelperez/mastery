@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,26 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://trading:trading@localhost:5432/trading",
         alias="DATABASE_URL",
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _ensure_asyncpg_driver(cls, v: object) -> object:
+        """Promociona `postgresql://` → `postgresql+asyncpg://` automáticamente.
+
+        Railway, Supabase, Heroku, Neon… todos exponen DATABASE_URL como
+        `postgresql://` (o el viejo `postgres://`). El stack usa asyncpg como
+        driver async, que SQLAlchemy resuelve con el dialect prefix
+        `postgresql+asyncpg`. En lugar de pedirle al user que añada el
+        prefix manualmente (frágil), lo hacemos aquí.
+        """
+        if not isinstance(v, str):
+            return v
+        s = v.strip()
+        if s.startswith("postgres://"):
+            return "postgresql+asyncpg://" + s[len("postgres://") :]
+        if s.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + s[len("postgresql://") :]
+        return s
     valkey_url: str = Field(
         default="redis://localhost:6379/0",
         alias="VALKEY_URL",
