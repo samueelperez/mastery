@@ -39,7 +39,7 @@ from app.config import get_settings
 from app.data.binance_adapter import EXCHANGE_NAME
 from app.db import session_scope
 from app.indicators import IndicatorSpec, compute_panel
-from app.ingestion.live_klines import WATCH_LIST
+from app.ingestion.live_klines import get_watch_list
 
 log = structlog.get_logger(__name__)
 
@@ -371,7 +371,7 @@ class AlertsRuntime:
     async def start(self) -> None:
         if self._tasks:
             return
-        for symbol, tf in WATCH_LIST:
+        for symbol, tf in get_watch_list():
             if tf == "1m":
                 # 1m candles fire every 60s — too noisy for alerts.
                 continue

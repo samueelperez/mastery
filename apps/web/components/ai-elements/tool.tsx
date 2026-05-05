@@ -45,12 +45,12 @@ export type ToolHeaderProps = {
 );
 
 const statusLabels: Record<ToolPart["state"], string> = {
-  "approval-requested": "Awaiting Approval",
-  "approval-responded": "Responded",
-  "input-available": "Running",
-  "input-streaming": "Pending",
-  "output-available": "Completed",
-  "output-denied": "Denied",
+  "approval-requested": "Aprobación pendiente",
+  "approval-responded": "Respondido",
+  "input-available": "Ejecutando",
+  "input-streaming": "Pendiente",
+  "output-available": "Completada",
+  "output-denied": "Denegada",
   "output-error": "Error",
 };
 

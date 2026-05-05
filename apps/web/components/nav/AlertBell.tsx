@@ -47,18 +47,17 @@ export function AlertBell() {
               : "alertas"
           }
           className={cn(
-            "relative flex size-8 items-center justify-center rounded-md transition-colors duration-150",
-            "text-muted-foreground hover:bg-accent/15 hover:text-foreground",
+            "relative grid size-9 place-items-center rounded-md transition-colors duration-150",
+            "text-[var(--fg-2)] hover:bg-[var(--bg-2)] hover:text-foreground",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
-            unreadCount > 0 && "text-foreground",
           )}
         >
           <BellIcon className="size-4" aria-hidden />
           {unreadCount > 0 && (
             <span
               className={cn(
-                "absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 font-mono text-[10px] font-medium tabular-nums",
-                "bg-primary text-primary-foreground",
+                "absolute -right-0.5 -top-0.5 inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-md px-1 text-[10px] font-bold tabular-nums",
+                "bg-[var(--amber)] text-[var(--bg-0)]",
               )}
             >
               {unreadCount > 99 ? "99+" : unreadCount}

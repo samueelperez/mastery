@@ -1,18 +1,62 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { ActivityIcon, FlaskConicalIcon, BellRingIcon } from "lucide-react"
 
 import { fetchOhlcv } from "@/lib/api"
 import { formatTimeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-/** Tiny live-data strip rendered under the login card.
- *
- * One REST call to /ohlcv?limit=1 (already public), refetched every 30s.
- * No WebSocket — the auth page is a transient surface; opening a WS for
- * 5-10s of presence is wasteful. The point is to show the user this is a
- * live tool they're entering, not a marketing landing.
- */
+interface LiveRowProps {
+  icon: React.ReactNode
+  label: string
+  value: string
+  hint?: string
+  status?: "live" | "ok" | "loading"
+}
+
+function LiveRow({ icon, label, value, hint, status = "ok" }: LiveRowProps) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2 backdrop-blur-sm">
+      <span
+        className={cn(
+          "grid size-6 place-items-center rounded border border-border/50 bg-[var(--bg-2)]/50",
+          "text-[var(--amber)]",
+        )}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)]">
+          {label}
+        </span>
+        <span className="truncate font-mono text-[12px] tabular-nums text-foreground">
+          {value}
+        </span>
+      </div>
+      {hint && (
+        <span className="hidden font-mono text-[10px] tabular-nums text-[var(--fg-3)] sm:inline">
+          {hint}
+        </span>
+      )}
+      <span
+        className={cn(
+          "dot ml-1",
+          status === "live"
+            ? "dot-live"
+            : status === "loading"
+              ? "bg-[var(--fg-3)] animate-pulse"
+              : "dot-amber",
+        )}
+        aria-hidden
+      />
+    </div>
+  )
+}
+
+/** Tres filas live debajo del pitch: precio BTC en vivo + 2 metadata
+ *  estáticas (claims que mantenemos hasta tener counts dinámicos). */
 export function LivePulse() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["auth-pulse-btcusdt-1h"],
@@ -26,37 +70,36 @@ export function LivePulse() {
   const price = candle?.c
   const ts = candle?.ts
 
+  const priceText =
+    price !== undefined
+      ? `$${price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+      : isError
+        ? "sin datos"
+        : "—"
+
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
-    >
-      <span className="flex items-center gap-1.5">
-        <span
-          className={cn(
-            "size-1.5 rounded-full transition-colors duration-300",
-            isError
-              ? "bg-destructive"
-              : isLoading || !candle
-                ? "bg-muted-foreground/40 animate-pulse"
-                : "bg-success",
-          )}
-          aria-hidden
-        />
-        <span className="text-foreground tabular-nums">
-          {price !== undefined ? `$${price.toLocaleString("en-US")}` : "—"}
-        </span>
-        <span>BTC</span>
-      </span>
-      <span aria-hidden>·</span>
-      <span className="tabular-nums">
-        {ts ? `última vela ${formatTimeAgo(ts)}` : "sincronizando"}
-      </span>
-      <span aria-hidden>·</span>
-      <span>14 herramientas</span>
-      <span aria-hidden>·</span>
-      <span>88 tests</span>
+    <div className="flex flex-col gap-2" role="status" aria-live="polite">
+      <LiveRow
+        icon={<ActivityIcon className="size-3" />}
+        label="BTCUSDT · 1h · spot"
+        value={priceText}
+        hint={ts ? formatTimeAgo(ts) : undefined}
+        status={isLoading ? "loading" : isError ? "ok" : "live"}
+      />
+      <LiveRow
+        icon={<FlaskConicalIcon className="size-3" />}
+        label="backtests reproducibles"
+        value="DSR + walk-forward + CPCV"
+        hint="14 herramientas"
+        status="ok"
+      />
+      <LiveRow
+        icon={<BellRingIcon className="size-3" />}
+        label="alertas — disparo a cierre de vela"
+        value="cooldown · regla determinista"
+        hint="WS push"
+        status="ok"
+      />
     </div>
   )
 }

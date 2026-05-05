@@ -48,7 +48,14 @@ StrategyFn = Callable[[pl.DataFrame, dict[str, Any]], SignalFrame]
 
 @dataclass(frozen=True)
 class StrategyDef:
+    """`id` is the technical key (used as foreign key in `backtest_runs`).
+    `name` is the human-readable label (en castellano) que se muestra en
+    /research/backtests cards y detail. `description` es 1-2 frases que
+    explican qué hace la estrategia. Mantenerlas separadas evita que la UI
+    tenga que mapear ids como `ema_cross_atr_stop` a "Cruce de EMAs"."""
+
     id: str
+    name: str
     fn: StrategyFn
     description: str
     default_params: dict[str, Any] = field(default_factory=dict)
@@ -60,6 +67,7 @@ STRATEGY_REGISTRY: dict[str, StrategyDef] = {}
 def register(
     id: str,
     *,
+    name: str,
     description: str,
     default_params: dict[str, Any] | None = None,
 ) -> Callable[[StrategyFn], StrategyFn]:
@@ -69,7 +77,11 @@ def register(
         if id in STRATEGY_REGISTRY:
             raise ValueError(f"Strategy id {id!r} already registered")
         STRATEGY_REGISTRY[id] = StrategyDef(
-            id=id, fn=fn, description=description, default_params=default_params or {}
+            id=id,
+            name=name,
+            fn=fn,
+            description=description,
+            default_params=default_params or {},
         )
         return fn
 

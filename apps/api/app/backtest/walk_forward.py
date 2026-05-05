@@ -1,14 +1,22 @@
-"""Walk-forward analysis — anchored vs rolling, with optional embargo.
+"""Walk-forward analysis — anchored vs rolling, with optional embargo + purge.
 
 Splits the time range into N consecutive (in-sample, out-of-sample) windows.
 For each split: re-instantiate the strategy with the SAME params (no
 re-optimization in F2; that's the agent's job once per strategy) and measure
 out-of-sample performance only.
 
-The point of walk-forward in F2 is to detect when a strategy's edge is
-front-loaded — strong in 2024 but flat in 2025. The CPCV in `cpcv.py` covers
-the broader question of "is this Sharpe statistically distinguishable from
-the best of N random tries".
+WARM-UP PURGE (Sprint D, 2026-05): cada fold OOS extiende su fetch hacia
+atrás `warmup_bars` velas para que indicadores con lookback largo (EMA200,
+SMA200, ATR, etc.) ya estén estables al entrar al OOS. Los trades cuya
+`entry_ts < oos_start` se PURGAN — son del periodo de warm-up y no
+representan performance OOS real. Sin esto, los primeros ~200 bars de cada
+fold producían 0 señales (indicadores en NaN) y el fold subestimaba la
+edge real de la estrategia.
+
+El point de walk-forward en F2 es detectar cuándo el edge de una estrategia
+está front-loaded — fuerte en 2024 pero plano en 2025. CPCV en `cpcv.py`
+cubre la pregunta más amplia de "¿este Sharpe es distinguible del mejor
+de N tries aleatorios?".
 """
 
 from __future__ import annotations
@@ -27,6 +35,15 @@ from app.backtest.metrics import (
 from app.backtest.runner import BacktestSpec, Trade, run_backtest
 
 log = structlog.get_logger(__name__)
+
+
+_TF_MINUTES: dict[str, int] = {"15m": 15, "1h": 60, "4h": 240, "1d": 1440}
+
+
+def _warmup_delta(timeframe: str, bars: int) -> timedelta:
+    """`bars` velas del timeframe traducidas a timedelta para warm-up de indicadores."""
+    minutes = _TF_MINUTES.get(timeframe, 60)
+    return timedelta(minutes=minutes * bars)
 
 
 @dataclass
@@ -55,13 +72,20 @@ async def run_walk_forward(
     is_months: int = 12,
     oos_months: int = 3,
     embargo_days: int = 1,
+    warmup_bars: int = 200,
     exchange: str = "binance_usdm",
 ) -> WalkForwardResult:
-    """Roll forward N=auto folds across [base_spec.since, base_spec.until]."""
+    """Roll forward N=auto folds across [base_spec.since, base_spec.until].
+
+    `warmup_bars` velas se cargan ANTES de cada `oos_start` para que los
+    indicadores arranquen estables; los trades abiertos en ese prefijo se
+    purgan de las métricas OOS.
+    """
     end = base_spec.until or datetime.now(tz=base_spec.since.tzinfo)
     is_delta = timedelta(days=is_months * 30)
     oos_delta = timedelta(days=oos_months * 30)
     embargo = timedelta(days=embargo_days)
+    warmup = _warmup_delta(base_spec.timeframe, warmup_bars)
 
     folds: list[WalkForwardFold] = []
     fold_idx = 0
@@ -73,9 +97,11 @@ async def run_walk_forward(
         if oos_end > end:
             break
 
-        # Run only on the OOS window — this is the honest measurement.
+        # Fetch con prefijo de warm-up; las métricas se calculan sólo sobre
+        # los trades cuya entry_ts >= oos_start (purga de warm-up).
+        fetch_since = oos_start - warmup
         oos_spec = BacktestSpec(
-            **{**base_spec.model_dump(), "since": oos_start, "until": oos_end}
+            **{**base_spec.model_dump(), "since": fetch_since, "until": oos_end}
         )
         try:
             result = await run_backtest(
@@ -94,6 +120,24 @@ async def run_walk_forward(
             fold_idx += 1
             continue
 
+        # Purga de warm-up: trades anteriores a oos_start se descartan, y la
+        # equity curve se reslizea + renormaliza para que arranque en el
+        # initial_equity al inicio del OOS real.
+        purged_trades = [t for t in result.trades if t.entry_ts >= oos_start]
+        oos_curve = [(ts, eq) for (ts, eq) in result.equity_curve if ts >= oos_start]
+        if oos_curve:
+            base_eq = oos_curve[0][1]
+            scale = base_spec.initial_equity / base_eq if base_eq > 0 else 1.0
+            oos_curve = [(ts, eq * scale) for ts, eq in oos_curve]
+
+        fold_metrics = compute_metrics(
+            equity_curve=oos_curve,
+            trades=[t.model_dump() for t in purged_trades],
+            initial_equity=base_spec.initial_equity,
+            n_trials=1,  # un solo OOS por fold; el trial-bias es fold-level
+            annualization_factor=annualization_factor_for(base_spec.timeframe),
+        )
+
         folds.append(
             WalkForwardFold(
                 fold=fold_idx,
@@ -101,10 +145,10 @@ async def run_walk_forward(
                 in_sample_end=is_end,
                 out_sample_start=oos_start,
                 out_sample_end=oos_end,
-                metrics=result.metrics,
-                n_trades=len(result.trades),
-                equity_curve=result.equity_curve,
-                trades=result.trades,
+                metrics=fold_metrics,
+                n_trades=len(purged_trades),
+                equity_curve=oos_curve,
+                trades=purged_trades,
             )
         )
         fold_idx += 1

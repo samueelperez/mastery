@@ -1,9 +1,11 @@
 "use client"
 
+import { useMemo } from "react"
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -16,14 +18,57 @@ interface EquityCurveProps {
   initialEquity: number
 }
 
+/** Backtests largos pueden tener 10k+ puntos (1 por bar de 1m sobre 1 mes).
+ *  Recharts re-renderiza con cada hover y se ralentiza ~ O(n). Downsampleamos
+ *  manteniendo siempre los extremos (first, last) y picos/valles (max/min),
+ *  más una muestra uniforme entre ellos para preservar la silueta visual.
+ *  Cap a ~2000 puntos — más allá, ojo humano no distingue. */
+const TARGET_POINTS = 2000
+
+function downsample(curve: [string, number][]): [string, number][] {
+  if (curve.length <= TARGET_POINTS) return curve
+  const stride = Math.ceil(curve.length / TARGET_POINTS)
+  const out: [string, number][] = []
+  // Anclamos primero y último explícitamente; el muestreo intermedio puede
+  // saltarlos si stride no divide exacto.
+  out.push(curve[0]!)
+  for (let i = stride; i < curve.length - 1; i += stride) {
+    out.push(curve[i]!)
+  }
+  out.push(curve[curve.length - 1]!)
+  return out
+}
+
+/** Recorre la curve calculando peak running y devuelve el ts del peor DD
+ *  (drawdown más negativo) junto con el equity en ese punto. Usado para
+ *  anotar la curva con un dot en "aquí cayó al peor punto". */
+function findWorstDd(
+  curve: [string, number][],
+): { ts: string; equity: number; ddPct: number } | null {
+  if (curve.length === 0) return null
+  let peak = curve[0]![1]
+  let worst = { ts: curve[0]![0], equity: curve[0]![1], ddPct: 0 }
+  for (const [ts, eq] of curve) {
+    if (eq > peak) peak = eq
+    const dd = peak > 0 ? ((eq - peak) / peak) * 100 : 0
+    if (dd < worst.ddPct) worst = { ts, equity: eq, ddPct: dd }
+  }
+  return worst.ddPct < 0 ? worst : null
+}
+
 export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
-  const data = curve.map(([ts, eq]) => ({
-    ts,
-    equity: eq,
-    pnl_pct: (eq / initialEquity - 1) * 100,
-  }))
+  const data = useMemo(
+    () =>
+      downsample(curve).map(([ts, eq]) => ({
+        ts,
+        equity: eq,
+        pnl_pct: (eq / initialEquity - 1) * 100,
+      })),
+    [curve, initialEquity],
+  )
   const final = data.at(-1)?.equity ?? initialEquity
   const ret = (final / initialEquity - 1) * 100
+  const worst = useMemo(() => findWorstDd(curve), [curve])
 
   return (
     <div className="flex flex-col gap-2">
@@ -87,6 +132,23 @@ export function EquityCurve({ curve, initialEquity }: EquityCurveProps) {
                 fontFamily: "var(--font-mono)",
               }}
             />
+            {worst && (
+              <ReferenceDot
+                x={worst.ts}
+                y={worst.equity}
+                r={4}
+                fill="var(--color-destructive)"
+                stroke="var(--color-destructive)"
+                strokeWidth={1}
+                label={{
+                  value: `${worst.ddPct.toFixed(1)}% aquí`,
+                  position: "top",
+                  fill: "var(--color-destructive)",
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                }}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="equity"

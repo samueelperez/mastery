@@ -296,7 +296,10 @@ _HYBRID_SQL = text(
       ORDER BY rrf DESC
       LIMIT :k
     )
-    SELECT t.id, t.trade_ts, t.symbol, t.timeframe, t.side, t.setup_tag,
+    -- Cast id::text porque la columna es `uuid` y asyncpg lo devuelve como
+    -- objeto Python uuid.UUID. Pydantic v2 no coerce a str automáticamente
+    -- y JournalSearchHit.id está declarado `str` → ValidationError.
+    SELECT t.id::text AS id, t.trade_ts, t.symbol, t.timeframe, t.side, t.setup_tag,
            t.regime, t.r_multiple, t.summary_text, f.rrf AS rrf_score
     FROM journal_trades t
     JOIN fused f USING (id)

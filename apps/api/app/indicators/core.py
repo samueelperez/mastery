@@ -64,8 +64,18 @@ def rsi(
     loss = pl.when(diff < 0).then(-diff).otherwise(0.0)
     avg_gain = gain.ewm_mean(alpha=1 / length, adjust=False, min_samples=length)
     avg_loss = loss.ewm_mean(alpha=1 / length, adjust=False, min_samples=length)
-    rs = avg_gain / avg_loss
-    return df.with_columns((100.0 - 100.0 / (1.0 + rs)).alias(col))
+    # Robust formulation: RSI = 100 * avg_gain / (avg_gain + avg_loss).
+    # Equivalente a la fórmula clásica `100 - 100/(1+RS)` cuando avg_loss>0,
+    # pero evita el div-by-0 en pumps puros (avg_loss=0 → RSI=100) o caídas
+    # puras (avg_gain=0 → RSI=0). Cuando ambos son 0 (precio plano), el LLM
+    # ve `null` (ambiguo, no inventamos un valor).
+    denom = avg_gain + avg_loss
+    rsi_expr = (
+        pl.when(denom > 0)
+        .then(100.0 * avg_gain / denom)
+        .otherwise(None)
+    )
+    return df.with_columns(rsi_expr.alias(col))
 
 
 def atr(

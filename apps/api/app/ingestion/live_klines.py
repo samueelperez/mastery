@@ -18,6 +18,7 @@ import structlog
 
 from app.agent.tools._time import floor_to_timeframe
 from app.broadcasting.pubsub import market_channel, publish_json
+from app.config import get_settings
 from app.data.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.data.exchange_context import ExchangeContext
 from app.data.normalizer import timeframe_delta
@@ -27,15 +28,27 @@ from app.storage.ohlcv_repo import bulk_upsert, last_ts, upsert_one
 log = structlog.get_logger(__name__)
 
 
-# (symbol, timeframe) pairs to ingest. F1 expands the higher TFs the agent uses
-# for multi-TF confluence + structure analysis.
-WATCH_LIST: list[tuple[str, str]] = [
-    ("BTCUSDT", "1m"),
-    ("BTCUSDT", "15m"),
-    ("BTCUSDT", "1h"),
-    ("BTCUSDT", "4h"),
-    ("BTCUSDT", "1d"),
-]
+# Timeframes que la ingesta live mantiene por cada símbolo de la watchlist.
+# El agente usa los altos para multi-TF confluence + structure analysis.
+TIMEFRAMES: tuple[str, ...] = ("1m", "15m", "1h", "4h", "1d")
+
+
+def get_watch_list() -> list[tuple[str, str]]:
+    """Producto cartesiano de Settings.watch_symbol_list × TIMEFRAMES.
+
+    Cambios en WATCH_SYMBOLS requieren reiniciar la API: el set de streams
+    CCXT pro y los loops del runtime de alertas se materializan al arranque.
+    `get_settings` está cacheada (lru_cache) así que llamar esto múltiples
+    veces dentro del mismo proceso es barato.
+    """
+    return [(sym, tf) for sym in get_settings().watch_symbol_list for tf in TIMEFRAMES]
+
+
+# Velas iniciales cuando un símbolo arranca con la serie vacía. 1000 cubre:
+#   1m → ~16h | 15m → ~10d | 1h → ~42d | 4h → ~167d | 1d → ~3y
+# Suficiente para que el chart frontend (limit=500) tenga histórico decente sin
+# tirarle a Binance los años que pediría el backfill CLI dedicado.
+INITIAL_SEED_CANDLES = 1000
 
 
 async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> None:
@@ -68,12 +81,9 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
                     async with session_scope() as session:
                         await upsert_one(session, candle)
                     last_persisted_ts = candle.ts
-                    log.debug(
-                        "ingest.persist",
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        ts=candle.ts.isoformat(),
-                    )
+                    # No log per persist — el evento es rutina (1m × 4 símbolos
+                    # = ~6/min) y enterraba señales útiles. Errores y
+                    # reconexiones siguen logueados (warning/info).
         except asyncio.CancelledError:
             log.info("ingest.watch.cancelled", symbol=symbol, timeframe=timeframe)
             raise
@@ -92,10 +102,15 @@ async def _fill_gap(
 ) -> int:
     """Page-fetch any candles missing between the last persisted one and now.
 
-    Runs once per (symbol, tf) at lifespan startup. If the series is empty
-    (fresh DB) we leave it alone — the user should run the dedicated
-    `app.ingestion.backfill` CLI for the initial 2y backfill instead of
-    trying to do it here at boot.
+    Two scenarios:
+      - **Serie con histórico**: hueco entre `last_ts` y `floor_now`. Lo
+        rellenamos página a página.
+      - **Serie vacía** (e.g. símbolo recién añadido a WATCH_SYMBOLS): hacemos
+        seed inicial de `INITIAL_SEED_CANDLES` velas. Sin esto, hasta que
+        cierre la primera vela post-arranque, el chart frontend (limit=500)
+        recibe lista vacía. El backfill CLI sigue disponible para series
+        históricas multi-año; este seed sólo da contexto reciente útil para
+        UI + indicadores rápidos.
 
     Returns the number of newly inserted candles.
     """
@@ -107,22 +122,28 @@ async def _fill_gap(
             session, exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe
         )
     if latest is None:
+        gap_start = floor_now - INITIAL_SEED_CANDLES * delta
         log.info(
-            "ingest.gap_fill.skip_empty_series", symbol=symbol, timeframe=timeframe
+            "ingest.gap_fill.seed_empty_series",
+            symbol=symbol,
+            timeframe=timeframe,
+            from_=gap_start.isoformat(),
+            to=floor_now.isoformat(),
+            candles=INITIAL_SEED_CANDLES,
         )
-        return 0
-    # Next missing candle starts one delta after the last persisted one.
-    gap_start = latest + delta
-    if gap_start >= floor_now:
-        return 0  # no gap
+    else:
+        # Next missing candle starts one delta after the last persisted one.
+        gap_start = latest + delta
+        if gap_start >= floor_now:
+            return 0  # no gap
 
-    log.info(
-        "ingest.gap_fill.start",
-        symbol=symbol,
-        timeframe=timeframe,
-        from_=gap_start.isoformat(),
-        to=floor_now.isoformat(),
-    )
+        log.info(
+            "ingest.gap_fill.start",
+            symbol=symbol,
+            timeframe=timeframe,
+            from_=gap_start.isoformat(),
+            to=floor_now.isoformat(),
+        )
     cursor_ms = int(gap_start.timestamp() * 1000)
     end_ms = int(floor_now.timestamp() * 1000)
     inserted = 0
@@ -157,23 +178,31 @@ class LiveIngestion:
     def __init__(self) -> None:
         self._adapter: BinanceAdapter | None = None
         self._tasks: list[asyncio.Task[None]] = []
+        self._watch_list: list[tuple[str, str]] = get_watch_list()
 
     async def start(self) -> None:
         if self._adapter is not None:
             return
         self._adapter = BinanceAdapter(ExchangeContext.MAINNET_RO)
+        symbols = sorted({s for s, _ in self._watch_list})
+        log.info(
+            "ingest.watchlist",
+            symbols=symbols,
+            timeframes=list(TIMEFRAMES),
+            n_streams=len(self._watch_list),
+        )
         # Close any gap from the previous shutdown BEFORE the WS subscriptions
         # take over — the WS only delivers NEW closes, never replays the past.
         # Run pairs in parallel; bulk_upsert is idempotent so any race with
         # the WS spawning below is safe (ON CONFLICT DO NOTHING).
         results = await asyncio.gather(
-            *(_fill_gap(self._adapter, symbol, tf) for symbol, tf in WATCH_LIST),
+            *(_fill_gap(self._adapter, symbol, tf) for symbol, tf in self._watch_list),
             return_exceptions=True,
         )
         total_filled = sum(r for r in results if isinstance(r, int))
         log.info("ingest.gap_fill.total", inserted=total_filled)
 
-        for symbol, tf in WATCH_LIST:
+        for symbol, tf in self._watch_list:
             t = asyncio.create_task(
                 _watch_loop(self._adapter, symbol, tf),
                 name=f"ingest:{symbol}:{tf}",

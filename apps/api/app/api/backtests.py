@@ -38,11 +38,28 @@ class BacktestRunSummary(BaseModel):
     metrics: dict[str, Any] | None = None  # metrics JSONB, parsed
 
 
+class TradeRow(BaseModel):
+    """Cada ítem del array `backtest_runs.trades` — persistido por
+    runner.py como `Trade.model_dump(mode="json")`. Usado por la página
+    de detalle para histograma de R-multiples y best/worst trade."""
+
+    entry_ts: datetime
+    exit_ts: datetime
+    side: str  # "long" en F2; "short" en F2.5+
+    entry_px: float
+    exit_px: float
+    r_multiple: float
+    pnl: float
+    bars_held: int
+    exit_reason: str  # "signal" | "stop"
+
+
 class BacktestRunDetail(BacktestRunSummary):
-    """List row + params + equity_curve for the drilldown view."""
+    """List row + params + equity_curve + trades for the drilldown view."""
 
     params: dict[str, Any] = Field(default_factory=dict)
     equity_curve: list[tuple[str, float]] = Field(default_factory=list)
+    trades: list[TradeRow] = Field(default_factory=list)
 
 
 @router.get("/backtests", response_model=list[BacktestRunSummary], tags=["research"])
@@ -52,6 +69,7 @@ async def list_backtests(
     symbol: Annotated[str | None, Query()] = None,
     timeframe: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[BacktestRunSummary]:
     rows = (
         await session.execute(
@@ -65,7 +83,7 @@ async def list_backtests(
                   AND (CAST(:sym AS text) IS NULL OR symbol = :sym)
                   AND (CAST(:tf  AS text) IS NULL OR timeframe = :tf)
                 ORDER BY created_at DESC
-                LIMIT :lim
+                LIMIT :lim OFFSET :off
                 """
             ),
             {
@@ -73,6 +91,7 @@ async def list_backtests(
                 "sym": symbol.upper() if symbol else None,
                 "tf": timeframe,
                 "lim": limit,
+                "off": offset,
             },
         )
     ).mappings().all()
@@ -90,7 +109,8 @@ async def get_backtest(
                 """
                 SELECT id::text, strategy_id, symbol, timeframe, params,
                        range_start, range_end, fees_bps, slippage_atr,
-                       status, created_at, finished_at, metrics, equity_curve
+                       status, created_at, finished_at, metrics,
+                       equity_curve, trades
                 FROM backtest_runs
                 WHERE id = CAST(:rid AS uuid)
                 """

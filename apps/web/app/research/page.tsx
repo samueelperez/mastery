@@ -1,151 +1,73 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import Link from "next/link"
+import { useMemo } from "react"
 
-import { BacktestList } from "@/components/research/BacktestList"
-import { Card, CardContent } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
+import { EdgeStateTiers } from "@/components/research/EdgeStateTiers"
+import { ResumenHero } from "@/components/research/ResumenHero"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchBacktests,
-  fetchJournalTrades,
+  fetchSetups,
   type BacktestRunSummaryDTO,
-  type JournalTradeListRowDTO,
+  type SetupListResponseDTO,
 } from "@/lib/api"
+import { tierStrategies } from "@/lib/edge-state"
+import { computeOverviewKpi } from "@/lib/research-rollup"
 
 export default function ResearchOverviewPage() {
-  const backtests = useQuery({
-    queryKey: ["backtests", { limit: 50 }],
-    queryFn: ({ signal }) => fetchBacktests({ limit: 50, signal }),
-  })
-  const trades = useQuery({
-    queryKey: ["journal-trades", { limit: 100 }],
-    queryFn: ({ signal }) => fetchJournalTrades({ limit: 100, signal }),
+  const backtests = useQuery<BacktestRunSummaryDTO[]>({
+    queryKey: ["backtests-overview", { limit: 100 }],
+    queryFn: ({ signal }) => fetchBacktests({ limit: 100, signal }),
+    staleTime: 60_000,
   })
 
-  const hero = computeHero(backtests.data ?? [], trades.data ?? [])
+  // Cerrados de cualquier source (agente + importados + paper + live).
+  // El backend trata `source: ""` como "sin filtro de source".
+  const closedSetups = useQuery<SetupListResponseDTO>({
+    queryKey: ["closed-setups-overview", { limit: 200 }],
+    queryFn: ({ signal }) =>
+      fetchSetups({
+        source: "",
+        status: "closed",
+        limit: 200,
+        signal,
+      }),
+    staleTime: 30_000,
+  })
+
+  const tiers = useMemo(
+    () => tierStrategies(backtests.data ?? []),
+    [backtests.data],
+  )
+  const totalClassified =
+    tiers.strong.length + tiers.marginal.length + tiers.weak.length
+
+  const kpi = useMemo(
+    () => computeOverviewKpi(closedSetups.data?.rows ?? []),
+    [closedSetups.data?.rows],
+  )
+
+  const heroLoading = closedSetups.isLoading
+  const tiersLoading = backtests.isLoading
 
   return (
-    <div className="flex flex-col gap-8">
-      <Hero stat={hero} loading={backtests.isLoading || trades.isLoading} />
+    <div className="flex flex-col gap-6">
+      {heroLoading ? (
+        <Skeleton className="h-44 w-full" />
+      ) : (
+        <ResumenHero kpi={kpi} />
+      )}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-mono text-sm uppercase tracking-widest text-foreground">
-              backtests recientes
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Últimas ejecuciones de todas las estrategias.
-            </p>
-          </div>
-          <Link
-            href="/research/backtests"
-            className="font-mono text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
-          >
-            ver todos →
-          </Link>
+      {tiersLoading ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
         </div>
-        <BacktestList
-          runs={(backtests.data ?? []).slice(0, 5)}
-          loading={backtests.isLoading}
-          error={backtests.error?.message}
-        />
-      </section>
+      ) : (
+        <EdgeStateTiers tiers={tiers} totalClassified={totalClassified} />
+      )}
     </div>
-  )
-}
-
-interface HeroStat {
-  headline: string
-  caption: string
-  tone: "good" | "bad" | "neutral"
-  rightPrimary: string
-  rightSecondary: string
-}
-
-function computeHero(
-  runs: BacktestRunSummaryDTO[],
-  trades: JournalTradeListRowDTO[],
-): HeroStat {
-  const closed = trades.filter(
-    (t) => t.r_multiple !== null && t.r_multiple !== undefined,
-  )
-  const wins = closed.filter((t) => (t.r_multiple ?? 0) > 0).length
-  const losses = closed.length - wins
-  const wr = closed.length > 0 ? wins / closed.length : 0
-
-  const dsrValues = runs
-    .filter((r) => r.metrics?.deflated_sharpe !== undefined)
-    .map((r) => r.metrics!.deflated_sharpe)
-  const bestDsr = dsrValues.length > 0 ? Math.max(...dsrValues) : null
-  const passing = runs.filter(
-    (r) =>
-      r.metrics &&
-      !r.metrics.overfit_warning &&
-      r.metrics.deflated_sharpe >= 0.5,
-  ).length
-
-  if (bestDsr === null && closed.length === 0) {
-    return {
-      headline: "—",
-      caption:
-        "sin datos aún · ejecuta un backtest o importa el diario para empezar.",
-      tone: "neutral",
-      rightPrimary: `${runs.length} runs`,
-      rightSecondary: `${trades.length} trades`,
-    }
-  }
-  if (bestDsr !== null) {
-    return {
-      headline: bestDsr.toFixed(2),
-      caption: `mejor DSR en ${runs.length} run${runs.length === 1 ? "" : "s"}; ${passing} pasan DSR≥0.5 + sin overfit.`,
-      tone: bestDsr >= 0.95 ? "good" : bestDsr >= 0.5 ? "neutral" : "bad",
-      rightPrimary: `${closed.length} trades cerrados`,
-      rightSecondary: `${(wr * 100).toFixed(0)}% WR · ${wins}G ${losses}P`,
-    }
-  }
-  return {
-    headline: `${(wr * 100).toFixed(0)}%`,
-    caption: `win-rate del diario · ${closed.length} trade${closed.length === 1 ? "" : "s"} cerrado${closed.length === 1 ? "" : "s"}.`,
-    tone: wr >= 0.5 ? "good" : "bad",
-    rightPrimary: `${runs.length} backtests`,
-    rightSecondary: "DSR pendiente",
-  }
-}
-
-function Hero({ stat, loading }: { stat: HeroStat; loading: boolean }) {
-  return (
-    <Card className="border-border bg-card">
-      <CardContent className="flex flex-col gap-6 py-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            edge hasta ahora
-          </span>
-          <span
-            className={cn(
-              "font-mono text-5xl font-medium tabular-nums",
-              loading && "opacity-40",
-              stat.tone === "good"
-                ? "text-primary"
-                : stat.tone === "bad"
-                  ? "text-destructive"
-                  : "text-foreground",
-            )}
-          >
-            {stat.headline}
-          </span>
-          <p className="max-w-md text-xs text-muted-foreground">{stat.caption}</p>
-        </div>
-        <div className="flex flex-col items-start gap-0.5 sm:items-end">
-          <span className="font-mono text-sm tabular-nums text-foreground">
-            {stat.rightPrimary}
-          </span>
-          <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            {stat.rightSecondary}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

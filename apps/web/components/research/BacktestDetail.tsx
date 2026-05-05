@@ -1,12 +1,24 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
+import { useMemo } from "react"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import type { BacktestRunDetailDTO } from "@/lib/api"
+import {
+  fetchStrategyRegistry,
+  type BacktestRunDetailDTO,
+  type StrategyRegistryDTO,
+} from "@/lib/api"
 
+import { AdvancedDiagnostics } from "./AdvancedDiagnostics"
+import { BacktestVerdict } from "./BacktestVerdict"
+import { BehaviorTriad } from "./BehaviorTriad"
 import { DrawdownChart } from "./DrawdownChart"
 import { EquityCurve } from "./EquityCurve"
-import { MetricsCard } from "./MetricsCard"
+import { RobustnessSection } from "./RobustnessSection"
+import { StrategyExplainer } from "./StrategyExplainer"
+import { TradeDistribution } from "./TradeDistribution"
 
 interface BacktestDetailProps {
   run: BacktestRunDetailDTO
@@ -15,64 +27,75 @@ interface BacktestDetailProps {
 export function BacktestDetail({ run }: BacktestDetailProps) {
   const initialEquity = Number(run.equity_curve[0]?.[1] ?? 10_000)
 
+  const registryQuery = useQuery({
+    queryKey: ["strategy-registry"],
+    queryFn: ({ signal }) => fetchStrategyRegistry({ signal }),
+    staleTime: Infinity,
+  })
+
+  const registryEntry = useMemo<StrategyRegistryDTO | undefined>(() => {
+    return (registryQuery.data ?? []).find((s) => s.id === run.strategy_id)
+  }, [registryQuery.data, run.strategy_id])
+
+  const displayName = registryEntry?.name ?? run.strategy_id
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-mono text-lg tracking-tight text-foreground">
-            {run.strategy_id}
-          </h1>
-          <span className="font-mono text-xs text-muted-foreground">
-            {run.symbol} · {run.timeframe} · {fmtRange(run.range_start, run.range_end)}
+    <div className="flex flex-col gap-5">
+      {/* Header — meta minimalista. La narrativa real vive en VerdictHero. */}
+      <header className="flex flex-col gap-1">
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--fg-3)]">
+          backtest run
+        </span>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          {displayName}{" "}
+          <span className="text-[var(--fg-3)]">·</span>{" "}
+          <span className="font-mono text-[var(--fg-2)]">
+            {run.symbol} {run.timeframe}
           </span>
-        </div>
-        <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-          run_id <span className="text-foreground">{run.id}</span> · fees{" "}
-          <span className="text-foreground">{run.fees_bps} bps</span> · slippage{" "}
-          <span className="text-foreground">{run.slippage_atr} × ATR</span>
+        </h1>
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
+          {registryEntry && <span>{run.strategy_id} · </span>}id{" "}
+          {run.id.slice(0, 8)}… · ejecutado{" "}
+          {new Date(run.created_at).toLocaleDateString(undefined, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
         </p>
-      </div>
+      </header>
 
-      {run.metrics && <MetricsCard metrics={run.metrics} />}
+      {/* 1. Verdict hero */}
+      <BacktestVerdict metrics={run.metrics} />
 
-      {run.equity_curve.length > 0 ? (
-        <Card className="border-border bg-card">
-          <CardContent className="space-y-6 pt-6">
-            <EquityCurve curve={run.equity_curve} initialEquity={initialEquity} />
+      {/* 2. ¿Qué hace esta estrategia? */}
+      <StrategyExplainer run={run} registryEntry={registryEntry} />
+
+      {/* 3. Comportamiento — 3 KPIs lego */}
+      <BehaviorTriad run={run} />
+
+      {/* 4. Robustez — DSR/PSR/PBO con copy lego */}
+      {run.metrics && <RobustnessSection metrics={run.metrics} />}
+
+      {/* 5. Curvas */}
+      {run.equity_curve.length > 0 && (
+        <Card className="border-border bg-card/40">
+          <CardContent className="flex flex-col gap-4 p-5">
+            <span className="eyebrow">comportamiento en el tiempo</span>
+            <EquityCurve
+              curve={run.equity_curve}
+              initialEquity={initialEquity}
+            />
             <Separator />
             <DrawdownChart curve={run.equity_curve} />
           </CardContent>
         </Card>
-      ) : (
-        <p className="font-mono text-xs text-muted-foreground">
-          (no se persistió equity curve para este run)
-        </p>
       )}
 
-      <Card className="border-border bg-card">
-        <CardContent className="pt-6">
-          <h3 className="mb-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-            parámetros
-          </h3>
-          <pre className="overflow-x-auto rounded-md bg-background p-3 font-mono text-xs text-foreground">
-            {JSON.stringify(run.params, null, 2)}
-          </pre>
-        </CardContent>
-      </Card>
+      {/* 6. Distribución de trades — solo si trades persistidos */}
+      <TradeDistribution trades={run.trades} />
+
+      {/* 7. Diagnóstico avanzado (Accordion colapsado) */}
+      <AdvancedDiagnostics run={run} />
     </div>
   )
-}
-
-function fmtRange(a: string, b: string): string {
-  const fa = new Date(a).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-  const fb = new Date(b).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-  return `${fa} → ${fb}`
 }

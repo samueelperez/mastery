@@ -167,6 +167,33 @@ def _kurt_excess(rets: np.ndarray) -> float:
     return float(((rets - m) ** 4).mean() / s ** 4 - 3.0)
 
 
+def _per_trade_returns(trades: list[dict[str, Any]], initial_equity: float) -> np.ndarray:
+    """Retornos % por trade (pnl / capital_at_entry).
+
+    Para PSR/DSR usamos esto en lugar de retornos por bar — cada trade es
+    aproximadamente independiente; los retornos por bar están altamente
+    autocorrelacionados durante una posición abierta (mark-to-market) y
+    sesgan al alza la confianza estadística (auditoría 2026-05 #B11).
+
+    Aproximamos `capital_at_entry` con `initial_equity` cuando no se conoce
+    explícitamente. Es un proxy conservador: tras compounding, la posición
+    se dimensiona sobre el equity vigente, así que el % return per trade
+    es el mismo que se ve en el simulador. """
+    if not trades:
+        return np.array([])
+    rs: list[float] = []
+    for t in trades:
+        pnl = t.get("pnl")
+        if pnl is None:
+            continue
+        # Aproximación: % return = pnl / initial_equity. Es el shape correcto
+        # bajo la hipótesis de que cada trade dimensiona ≈igual; con
+        # compounding real la magnitud absoluta de pnl crece, pero el ratio
+        # mean/std no cambia (homogeneidad por escala).
+        rs.append(float(pnl) / initial_equity)
+    return np.array(rs, dtype=np.float64)
+
+
 # -----------------------------------------------------------------------------
 # López de Prado family
 # -----------------------------------------------------------------------------
@@ -265,18 +292,38 @@ def compute_metrics(
 
     sharpe = _sharpe_from_returns(rets, ann=annualization_factor)
     sortino = _sortino_from_returns(rets, ann=annualization_factor)
-    # Per-observation (un-annualized) Sharpe — what Bailey & López de Prado's
-    # PSR/DSR formulas expect, since `n` below is in observations not years.
-    sharpe_raw = _sharpe_from_returns(rets, ann=1.0)
     max_dd, max_dd_dur = _max_dd(equity_vals)
     ulcer = _ulcer_index(equity_vals)
     tail = _tail_ratio(rets)
     sk = _skew(rets)
     ku = _kurt_excess(rets)
 
-    n = len(equity_vals)
-    psr = probabilistic_sharpe(sharpe_raw, n, skew=sk, kurt_excess=ku, sr_benchmark=0.0)
-    dsr = deflated_sharpe(sharpe_raw, n, n_trials=n_trials, skew=sk, kurt_excess=ku)
+    # PSR/DSR usan Sharpe per-trade y n=n_trades (auditoría 2026-05 #B11).
+    # Los retornos por bar están autocorrelacionados durante posiciones
+    # abiertas (mark-to-market); usar `n=len(bars)` infla la confianza
+    # estadística 2-3×. Cada trade es ≈independiente — esa es la N efectiva
+    # que usan Bailey & López de Prado en AFML §13.2.
+    trade_rets = _per_trade_returns(trades, initial_equity)
+    if trade_rets.size >= 3:
+        sharpe_per_trade = float(trade_rets.mean() / trade_rets.std(ddof=1))
+        if not math.isfinite(sharpe_per_trade):
+            sharpe_per_trade = 0.0
+        sk_trades = _skew(trade_rets)
+        ku_trades = _kurt_excess(trade_rets)
+        n_eff = trade_rets.size
+        psr = probabilistic_sharpe(
+            sharpe_per_trade, n_eff,
+            skew=sk_trades, kurt_excess=ku_trades, sr_benchmark=0.0,
+        )
+        dsr = deflated_sharpe(
+            sharpe_per_trade, n_eff, n_trials=n_trials,
+            skew=sk_trades, kurt_excess=ku_trades,
+        )
+    else:
+        # Sin trades suficientes (cold start o estrategia que no dispara) —
+        # neutral por convención (igual que probabilistic_sharpe(n<3)).
+        psr = 0.5
+        dsr = 0.0
 
     # Trade-level stats
     if trades:

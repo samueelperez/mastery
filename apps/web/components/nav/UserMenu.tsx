@@ -1,7 +1,8 @@
 "use client"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { LogOutIcon, UserIcon } from "lucide-react"
+import { LogOutIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
+import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 
 import {
@@ -31,7 +32,7 @@ function initials(input: string | null | undefined): string {
  * placeholder is byte-identical between SSR and first client render → no
  * hydration warning. */
 function UserMenuPlaceholder() {
-  return <span className="size-8" aria-hidden />
+  return <span className="size-9" aria-hidden />
 }
 
 export function UserMenu() {
@@ -40,6 +41,8 @@ export function UserMenu() {
 
   const { data, isPending } = authClient.useSession()
   const queryClient = useQueryClient()
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme === "dark"
 
   // Defer rendering session-dependent UI until after hydration: SSR + first
   // client paint always render the placeholder, the actual menu mounts on the
@@ -67,9 +70,10 @@ export function UserMenu() {
           type="button"
           aria-label={`Menú de cuenta de ${name ?? email}`}
           className={cn(
-            "flex size-8 items-center justify-center rounded-full",
-            "bg-accent/30 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground",
-            "transition-colors duration-150 hover:bg-accent/50",
+            "grid size-9 place-items-center rounded-full border border-border",
+            "bg-[linear-gradient(135deg,var(--violet)_0%,oklch(0.55_0.18_320)_100%)]",
+            "font-mono text-[12px] font-semibold uppercase tracking-wide text-white",
+            "transition-shadow duration-150 hover:shadow-[0_0_0_2px_var(--violet-soft)]",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
           )}
         >
@@ -85,28 +89,42 @@ export function UserMenu() {
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={6} className="min-w-[14rem]">
+      <DropdownMenuContent align="end" sideOffset={8} className="min-w-[15rem]">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-xs text-foreground">
+            <span className="text-[14px] font-medium text-foreground">
               {name ?? "—"}
             </span>
-            <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
+            <span className="font-mono text-[11px] tracking-wide text-muted-foreground">
               {email}
             </span>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="font-mono text-xs"
+          className="text-[14px]"
           disabled
           aria-disabled
         >
-          <UserIcon className="size-3.5" aria-hidden />
+          <UserIcon className="size-4" aria-hidden />
           perfil (próximamente)
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleSignOut} className="font-mono text-xs">
-          <LogOutIcon className="size-3.5" aria-hidden />
+        <DropdownMenuItem
+          className="text-[14px]"
+          onSelect={(e) => {
+            e.preventDefault()
+            setTheme(isDark ? "light" : "dark")
+          }}
+        >
+          {isDark ? (
+            <SunIcon className="size-4" aria-hidden />
+          ) : (
+            <MoonIcon className="size-4" aria-hidden />
+          )}
+          {isDark ? "modo claro" : "modo oscuro"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleSignOut} className="text-[14px]">
+          <LogOutIcon className="size-4" aria-hidden />
           cerrar sesión
         </DropdownMenuItem>
       </DropdownMenuContent>

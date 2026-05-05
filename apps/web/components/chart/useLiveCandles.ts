@@ -37,6 +37,12 @@ export function useLiveCandles(symbol: string, timeframe: string, limit = 500): 
   const wsRef = useRef<ReturnType<typeof connectMarketWs> | null>(null)
 
   useEffect(() => {
+    // Al cambiar (symbol, tf) reseteamos `live`. Si no, la última tick del
+    // símbolo previo se quedaría visible en el chart hasta que llegue la
+    // primera tick del nuevo — que para 4h o 1d puede tardar minutos.
+    setLive(null)
+    setWsConnected(false)
+
     const ws = connectMarketWs(symbol, timeframe)
     wsRef.current = ws
 

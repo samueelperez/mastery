@@ -18,9 +18,11 @@ from app.indicators.momentum import bbands
 
 @register(
     id="bb_reversion_atr_stop",
+    name="Reversión Bollinger",
     description=(
-        "Long mean-reversion: enter when close < bb_lower; exit when close > bb_mid "
-        "or price drops below bb_lower - k·ATR (hard stop on real breakdown)."
+        "Estrategia de reversión a la media. Entra largo cuando el precio "
+        "perfora la banda inferior de Bollinger; sale al volver a la media "
+        "o si rompe la banda inferior menos k×ATR (stop ante ruptura real)."
     ),
     default_params={"length": 20, "stds": 2.0, "atr_length": 14, "atr_k": 1.0},
 )

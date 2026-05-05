@@ -47,8 +47,49 @@ _DEFAULT_LENGTHS: dict[IndicatorName, int] = {
 }
 
 
+def _grouped_suffix(spec: IndicatorSpec) -> str:
+    """Sufijo único por spec para evitar colisión entre dos indicadores del
+    mismo tipo con longitudes distintas (e.g. bbands(20) y bbands(50)).
+
+    Política: usamos sufijo SÓLO cuando la longitud difiere del default. Así:
+      - bbands() o bbands(20)  → cols `bb_mid`, `bb_upper`...        (default)
+      - bbands(50)             → cols `bb_mid_50`, `bb_upper_50`...  (sufijo)
+      - bbands(20) + bbands(50) en una llamada → uno por column-set, sin
+        colisión.
+
+    Mantiene backward compat con tests/clientes que esperan los nombres
+    "limpios" cuando no hay parametrización. """
+    if spec.length is None:
+        return ""
+    default = _DEFAULT_LENGTHS.get(spec.name, 0)
+    if spec.length == default:
+        return ""
+    return f"_{spec.length}"
+
+
+def grouped_columns(spec: IndicatorSpec) -> list[str]:
+    """Devuelve las columnas que producirá este spec en el panel.
+    Usado por `agent/tools/indicators.py` para mapear cada spec a sus
+    columnas en el `latest` snapshot. """
+    suf = _grouped_suffix(spec)
+    match spec.name:
+        case "macd":
+            # macd no parametriza longitud, sólo fast/slow/signal default.
+            return ["macd", "macd_signal", "macd_hist"]
+        case "bbands":
+            return [f"bb_mid{suf}", f"bb_upper{suf}", f"bb_lower{suf}", f"bb_bw{suf}"]
+        case "adx":
+            return [f"adx{suf}", f"plus_di{suf}", f"minus_di{suf}"]
+        case "vwap":
+            return ["vwap"]
+        case _:
+            length = spec.length if spec.length is not None else _DEFAULT_LENGTHS[spec.name]
+            return [f"{spec.name}_{length}"]
+
+
 def _apply(lf: pl.LazyFrame, spec: IndicatorSpec) -> pl.LazyFrame:
     length = spec.length if spec.length is not None else _DEFAULT_LENGTHS[spec.name]
+    suf = _grouped_suffix(spec)
     match spec.name:
         case "sma":
             return sma(lf, length=length, source=spec.source)
@@ -61,9 +102,23 @@ def _apply(lf: pl.LazyFrame, spec: IndicatorSpec) -> pl.LazyFrame:
         case "macd":
             return macd(lf, source=spec.source)
         case "bbands":
-            return bbands(lf, length=length, source=spec.source)
+            return bbands(
+                lf,
+                length=length,
+                source=spec.source,
+                out_mid=f"bb_mid{suf}",
+                out_upper=f"bb_upper{suf}",
+                out_lower=f"bb_lower{suf}",
+                out_bw=f"bb_bw{suf}",
+            )
         case "adx":
-            return adx(lf, length=length)
+            return adx(
+                lf,
+                length=length,
+                out_adx=f"adx{suf}",
+                out_plus_di=f"plus_di{suf}",
+                out_minus_di=f"minus_di{suf}",
+            )
         case "vwap":
             return vwap(lf, anchor="session")
 

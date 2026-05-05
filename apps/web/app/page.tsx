@@ -1,16 +1,36 @@
-import { LiveBtcChart } from "@/components/chart/LiveBtcChart"
+"use client"
+
+import { Suspense } from "react"
+
+import { LiveChart } from "@/components/chart/LiveChart"
 import { CopilotChat } from "@/components/chat/CopilotChat"
+import { SymbolSidebar } from "@/components/dashboard/SymbolSidebar"
+import { useActiveSymbol } from "@/lib/store/active-symbol"
+import { useActiveSymbolUrlSync } from "@/lib/store/use-symbol-url-sync"
 
 export default function Page() {
   return (
-    <main className="flex min-h-[calc(100svh-3.5rem)] flex-col gap-4 p-4 sm:p-6">
-      <section className="grid h-[calc(100svh-6rem)] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_28rem]">
-        <div className="overflow-hidden rounded-lg border border-border bg-card p-3">
-          <LiveBtcChart
-            symbol="BTCUSDT"
-            timeframe="1h"
-            className="h-[calc(100%-1.75rem)] w-full"
-          />
+    <Suspense>
+      <Dashboard />
+    </Suspense>
+  )
+}
+
+function Dashboard() {
+  useActiveSymbolUrlSync()
+  const { symbol, timeframe } = useActiveSymbol()
+
+  return (
+    <main className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+      <section
+        className="
+          grid min-h-0 flex-1 grid-cols-1 gap-4
+          lg:grid-cols-[200px_minmax(0,1fr)_28rem]
+        "
+      >
+        <SymbolSidebar />
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card p-3">
+          <LiveChart symbol={symbol} timeframe={timeframe} />
         </div>
         <CopilotChat className="h-full" />
       </section>

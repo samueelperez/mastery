@@ -118,9 +118,39 @@ export interface BacktestRunSummaryDTO {
   metrics: StrategyMetricsDTO | null
 }
 
+export interface TradeDTO {
+  entry_ts: string
+  exit_ts: string
+  side: "long" | "short"
+  entry_px: number
+  exit_px: number
+  r_multiple: number
+  pnl: number
+  bars_held: number
+  exit_reason: "signal" | "stop"
+}
+
 export interface BacktestRunDetailDTO extends BacktestRunSummaryDTO {
   params: Record<string, unknown>
   equity_curve: [string, number][]
+  trades: TradeDTO[]
+}
+
+export interface StrategyRegistryDTO {
+  id: string
+  name: string
+  description: string
+  default_params: Record<string, unknown>
+}
+
+export async function fetchStrategyRegistry(
+  opts: { signal?: AbortSignal } = {},
+): Promise<StrategyRegistryDTO[]> {
+  const res = await apiFetch(`${env.apiUrl}/strategies/registry`, {
+    signal: opts.signal,
+  })
+  if (!res.ok) throw new Error(`fetchStrategyRegistry failed: ${res.status}`)
+  return (await res.json()) as StrategyRegistryDTO[]
 }
 
 export async function fetchBacktests(
@@ -129,6 +159,7 @@ export async function fetchBacktests(
     symbol?: string
     timeframe?: string
     limit?: number
+    offset?: number
     signal?: AbortSignal
   } = {},
 ): Promise<BacktestRunSummaryDTO[]> {
@@ -137,6 +168,7 @@ export async function fetchBacktests(
   if (opts.symbol) params.set("symbol", opts.symbol)
   if (opts.timeframe) params.set("timeframe", opts.timeframe)
   params.set("limit", String(opts.limit ?? 50))
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset))
   const res = await apiFetch(`${env.apiUrl}/backtests?${params}`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchBacktests failed: ${res.status}`)
   return (await res.json()) as BacktestRunSummaryDTO[]
@@ -182,12 +214,19 @@ export interface JournalTradeDetailDTO extends JournalTradeListRowDTO {
 }
 
 export async function fetchJournalTrades(
-  opts: { mode?: string; regime?: string; limit?: number; signal?: AbortSignal } = {},
+  opts: {
+    mode?: string
+    regime?: string
+    limit?: number
+    offset?: number
+    signal?: AbortSignal
+  } = {},
 ): Promise<JournalTradeListRowDTO[]> {
   const params = new URLSearchParams()
   if (opts.mode) params.set("mode", opts.mode)
   if (opts.regime) params.set("regime", opts.regime)
   params.set("limit", String(opts.limit ?? 50))
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset))
   const res = await apiFetch(`${env.apiUrl}/journal/trades?${params}`, { signal: opts.signal })
   if (!res.ok) throw new Error(`fetchJournalTrades failed: ${res.status}`)
   return (await res.json()) as JournalTradeListRowDTO[]
@@ -202,6 +241,151 @@ export async function fetchJournalTrade(
   })
   if (!res.ok) throw new Error(`fetchJournalTrade failed: ${res.status}`)
   return (await res.json()) as JournalTradeDetailDTO
+}
+
+// -----------------------------------------------------------------------------
+// Setups (lifecycle pending → active → closed)
+// -----------------------------------------------------------------------------
+
+export type SetupStatus = "pending" | "active" | "closed" | "cancelled"
+
+export interface SetupTargetDTO {
+  label: string
+  price: number
+  rationale?: string | null
+  hit_at?: string | null
+}
+
+export interface SetupListRowDTO {
+  id: string
+  user_id: string
+  trade_ts: string
+  symbol: string
+  timeframe: string
+  side: "long" | "short"
+  status: SetupStatus
+  source: string
+  entry_px: number
+  invalidation_px: number | null
+  exit_px: number | null
+  size: number
+  r_multiple: number | null
+  setup_tag: string
+  regime: string
+  confidence: "low" | "medium" | "high" | null
+  targets: SetupTargetDTO[]
+  mistakes: string | null
+  proposed_at: string | null
+  entry_hit_at: string | null
+  closed_at: string | null
+  created_at: string
+}
+
+export interface SetupEventDTO {
+  id: string
+  event:
+    | "proposed"
+    | "entry_hit"
+    | "tp_hit"
+    | "sl_hit"
+    | "expired"
+    | "manual_close"
+    | "cancelled"
+  candle_ts: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export interface SetupDetailDTO extends SetupListRowDTO {
+  summary_text: string
+  news_24h: Record<string, unknown>
+  features: Record<string, unknown>
+  mistakes: string | null
+  updated_at: string
+  events: SetupEventDTO[]
+}
+
+export interface SetupStatusCountsDTO {
+  pending: number
+  active: number
+  closed: number
+  cancelled: number
+}
+
+export interface SetupListResponseDTO {
+  rows: SetupListRowDTO[]
+  counts: SetupStatusCountsDTO
+}
+
+export async function fetchSetups(
+  opts: {
+    status?: SetupStatus
+    symbol?: string
+    source?: string
+    setupTag?: string
+    limit?: number
+    offset?: number
+    signal?: AbortSignal
+  } = {},
+): Promise<SetupListResponseDTO> {
+  const params = new URLSearchParams()
+  if (opts.status) params.set("status", opts.status)
+  if (opts.symbol) params.set("symbol", opts.symbol)
+  if (opts.source !== undefined) params.set("source", opts.source)
+  if (opts.setupTag !== undefined) params.set("setup_tag", opts.setupTag)
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit))
+  if (opts.offset !== undefined) params.set("offset", String(opts.offset))
+  const res = await apiFetch(`${env.apiUrl}/journal/setups?${params}`, {
+    signal: opts.signal,
+  })
+  if (!res.ok) throw new Error(`fetchSetups failed: ${res.status}`)
+  return (await res.json()) as SetupListResponseDTO
+}
+
+export async function fetchSetup(
+  setupId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<SetupDetailDTO> {
+  const res = await apiFetch(
+    `${env.apiUrl}/journal/setups/${encodeURIComponent(setupId)}`,
+    { signal: opts.signal },
+  )
+  if (!res.ok) throw new Error(`fetchSetup failed: ${res.status}`)
+  return (await res.json()) as SetupDetailDTO
+}
+
+export async function cancelSetupRequest(setupId: string): Promise<void> {
+  const res = await apiFetch(
+    `${env.apiUrl}/journal/setups/${encodeURIComponent(setupId)}/cancel`,
+    { method: "POST" },
+  )
+  if (!res.ok) throw new Error(`cancelSetupRequest failed: ${res.status}`)
+}
+
+// -----------------------------------------------------------------------------
+// Strategies winrate (PR2 surface)
+// -----------------------------------------------------------------------------
+
+export interface StrategyWinrateDTO {
+  setup_tag: string
+  n_closed: number
+  n_wins: number
+  win_rate_pct: number | null
+  avg_r: number | null
+  last_closed_at: string | null
+}
+
+export async function fetchStrategyWinrate(
+  opts: { minN?: number; signal?: AbortSignal } = {},
+): Promise<StrategyWinrateDTO[]> {
+  const params = new URLSearchParams()
+  if (opts.minN !== undefined) params.set("min_n", String(opts.minN))
+  const res = await apiFetch(
+    `${env.apiUrl}/strategies/winrate?${params}`,
+    { signal: opts.signal },
+  )
+  if (!res.ok) throw new Error(`fetchStrategyWinrate failed: ${res.status}`)
+  return (await res.json()) as StrategyWinrateDTO[]
 }
 
 // -----------------------------------------------------------------------------

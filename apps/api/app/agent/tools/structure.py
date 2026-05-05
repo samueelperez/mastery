@@ -42,6 +42,10 @@ class MarketStructure(BaseModel):
     atr_used: float | None = Field(
         default=None, description="ATR(14) used to cluster pivots into levels."
     )
+    pivot_strength_used: int = Field(
+        default=3,
+        description="Pivot strength actually applied (resolved from adaptive heuristic if 0 was passed).",
+    )
 
 
 def _find_pivots(
@@ -64,13 +68,21 @@ def _find_pivots(
 
 
 def _cluster_levels(pivots: list[Pivot], tolerance: float) -> list[Level]:
-    """Cluster pivots whose prices are within `tolerance` of each other."""
+    """Complete-linkage clustering: en un cluster, cada pivot está dentro de
+    `tolerance` de TODOS los demás (diámetro ≤ tolerance).
+
+    En 1D ordenado por precio se simplifica a "el nuevo está dentro de
+    tolerance del PRIMERO del cluster". Single-linkage (la versión vieja,
+    que comparaba contra el último) permitía chain drift: A↔B y B↔C cerca
+    pero A↔C lejos colapsando todo en un mismo S/R artificial.
+    """
     if not pivots:
         return []
     by_price = sorted(pivots, key=lambda p: p.price)
     groups: list[list[Pivot]] = [[by_price[0]]]
     for p in by_price[1:]:
-        if abs(p.price - groups[-1][-1].price) <= tolerance:
+        first_in_group = groups[-1][0]
+        if p.price - first_in_group.price <= tolerance:
             groups[-1].append(p)
         else:
             groups.append([p])
@@ -82,6 +94,40 @@ def _cluster_levels(pivots: list[Pivot], tolerance: float) -> list[Level]:
         )
         for g in groups
     ]
+
+
+def _adaptive_pivot_strength(df: pl.DataFrame, fallback: int = 3) -> int:
+    """Escala pivot_strength con el rango relativo medio por vela.
+
+    Heurística: más volatilidad relativa por barra → más velas para confirmar
+    un swing real (filtra noise); menos volatilidad → menos velas (gana
+    sensitivity en consolidación). Acota a [2, 5] — fuera de rango es ruido
+    o sobreajuste.
+
+    Crypto baselines aproximados (rango (h-l)/c):
+      < 0.5%/bar → consolidación (strength=2)
+      0.5%–1.5%  → normal (strength=3)
+      1.5%–2.5%  → trend con swings amplios (strength=4)
+      > 2.5%     → régimen volátil / news (strength=5)
+    """
+    if df.height < 30:
+        return fallback
+    med = (
+        df.lazy()
+        .select(((pl.col("h") - pl.col("l")) / pl.col("c")).alias("r"))
+        .collect()["r"]
+        .drop_nulls()
+        .median()
+    )
+    if med is None:
+        return fallback
+    if med > 0.025:
+        return 5
+    if med > 0.015:
+        return 4
+    if med < 0.005:
+        return 2
+    return 3
 
 
 def _trend_label(highs: list[Pivot], lows: list[Pivot]) -> str:
@@ -110,12 +156,17 @@ def register_structure_tools(agent: Agent[AgentDeps, object]) -> None:
         ctx: RunContext[AgentDeps],
         symbol: str,
         timeframe: Literal["15m", "1h", "4h", "1d"],
-        pivot_strength: Annotated[int, Field(ge=2, le=8)] = 3,
+        pivot_strength: Annotated[int, Field(ge=0, le=8)] = 0,
         lookback: Annotated[int, Field(ge=100, le=1500)] = 500,
     ) -> ToolResult[MarketStructure]:
         """Find swing highs/lows (fractal of strength N), cluster into S/R levels
-        (tolerance = 0.25·ATR(14)), and label the trend from the last 2 pivots
-        of each kind.
+        (tolerance = 0.25·ATR(14), complete-linkage), and label the trend from
+        the last 2 pivots of each kind.
+
+        `pivot_strength=0` (default) → adaptativo según volatilidad relativa
+        por barra: consolidación usa 2, trend volátil usa 4-5. Pasa un valor
+        ≥2 sólo si quieres override manual (raro). El elegido se reporta en
+        `pivot_strength_used`.
 
         Use to anchor entry/invalidation/target prices on logical levels.
         """
@@ -157,7 +208,11 @@ def register_structure_tools(agent: Agent[AgentDeps, object]) -> None:
         atr_v = float(atr_last[-1]) if atr_last else None
         tolerance = 0.25 * (atr_v or 0.0)
 
-        highs, lows = _find_pivots(df, pivot_strength)
+        # Adaptive pivot strength: 0 (default sentinel) → derive from volatility
+        # regime; explicit ≥2 → respect user override (raro pero permitido).
+        strength = pivot_strength if pivot_strength >= 2 else _adaptive_pivot_strength(df)
+
+        highs, lows = _find_pivots(df, strength)
         support = _cluster_levels(lows, tolerance) if tolerance > 0 else []
         resistance = _cluster_levels(highs, tolerance) if tolerance > 0 else []
 
@@ -185,6 +240,7 @@ def register_structure_tools(agent: Agent[AgentDeps, object]) -> None:
                 trend_label=_trend_label(highs, lows),
                 current_close=last_close,
                 atr_used=atr_v,
+                pivot_strength_used=strength,
             ),
             provenance=Provenance(
                 source=f"db.ohlcv:{ctx.deps.exchange}:{symbol}:{timeframe}",

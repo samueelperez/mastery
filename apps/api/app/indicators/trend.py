@@ -43,15 +43,37 @@ def adx(
     plus_dm_w = plus_dm.ewm_mean(alpha=alpha, adjust=False, min_samples=length)
     minus_dm_w = minus_dm.ewm_mean(alpha=alpha, adjust=False, min_samples=length)
 
-    plus_di = (100.0 * plus_dm_w / atr_w).alias(out_plus_di)
-    minus_di = (100.0 * minus_dm_w / atr_w).alias(out_minus_di)
+    # +DI / -DI: preservamos null durante warmup (atr_w es null hasta `length`
+    # velas). Tras warmup, si atr_w == 0 (mercado totalmente plano N velas
+    # seguidas — extremadamente raro pero posible) devolvemos 0, no inf.
+    plus_di_expr = (
+        pl.when(atr_w.is_null())
+        .then(None)
+        .when(atr_w > 0)
+        .then(100.0 * plus_dm_w / atr_w)
+        .otherwise(0.0)
+    )
+    minus_di_expr = (
+        pl.when(atr_w.is_null())
+        .then(None)
+        .when(atr_w > 0)
+        .then(100.0 * minus_dm_w / atr_w)
+        .otherwise(0.0)
+    )
+    plus_di = plus_di_expr.alias(out_plus_di)
+    minus_di = minus_di_expr.alias(out_minus_di)
 
-    # DX is null while DI is null (warmup). Fill with 0 before the EWM so Polars'
-    # `min_samples=length` semantics line up with the textbook Wilder recursion
-    # (which seeds DX as 0 during warmup). The leading values are then dominated
-    # by zeros and become meaningful only after ~2·length rows — matching ADX's
-    # canonical "warmup ≈ 2·length" rule of thumb.
-    dx = (100.0 * (plus_di - minus_di).abs() / (plus_di + minus_di)).fill_null(0.0)
+    # DX = 100·|+DI − -DI| / (+DI + -DI). Cuando ambos DIs son 0 (mercado
+    # plano post-warmup), DX colapsa a 0 (no a NaN). `fill_null(0.0)` sigue
+    # cubriendo el warmup `min_samples=length` para que la EWM de Wilder
+    # arranque limpia. Tras esto, ADX = Wilder(DX).
+    di_sum = plus_di_expr + minus_di_expr
+    dx = (
+        pl.when(di_sum > 0)
+        .then(100.0 * (plus_di_expr - minus_di_expr).abs() / di_sum)
+        .otherwise(0.0)
+        .fill_null(0.0)
+    )
     adx_v = dx.ewm_mean(alpha=alpha, adjust=False, min_samples=length).alias(out_adx)
 
     return df.with_columns(plus_di, minus_di, adx_v)

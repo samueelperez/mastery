@@ -5,14 +5,12 @@ import { useQuery } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
 import { fetchHealth } from "@/lib/api"
 
-/** Live data-plane indicator for the global nav.
+/** Live data-plane indicator for the global nav — `.pill` style.
  *
  * Polls `/health` every 30s. Three visual states:
- *   - green  (primary)    — db & valkey both ok
- *   - amber                — partial: api up but one dependency down
- *   - red    (destructive) — api unreachable / non-2xx
- *
- * Click target is decorative; status is read-only.
+ *   - long  (green) — db & valkey both ok
+ *   - amber         — partial: api up but one dependency down
+ *   - short (red)   — api unreachable / non-2xx
  */
 export function ConnectionPill() {
   const { data, isError, isLoading } = useQuery({
@@ -36,10 +34,10 @@ export function ConnectionPill() {
   })()
 
   const dotClass = {
-    loading: "bg-muted-foreground animate-pulse",
-    ok: "bg-success",
-    partial: "bg-warning",
-    down: "bg-destructive",
+    loading: "bg-[var(--fg-3)] animate-pulse",
+    ok: "dot-live",
+    partial: "dot-amber",
+    down: "dot-short",
   }[tone]
 
   const title = {
@@ -52,13 +50,9 @@ export function ConnectionPill() {
   }[tone]
 
   return (
-    <span
-      title={title}
-      className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
-    >
-      <span className={cn("size-1.5 rounded-full", dotClass)} aria-hidden />
-      <span className="hidden sm:inline">Binance USDT-M · MAINNET-RO</span>
-      <span className="sm:hidden">en vivo</span>
+    <span title={title} className="pill hidden md:inline-flex">
+      <span className={cn("dot", dotClass)} aria-hidden />
+      <span>binance · usdt-m</span>
     </span>
   )
 }

@@ -2,10 +2,9 @@
 
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 
-/** Theme is forced dark — the trading copilot is a dark-first product (slate
- * background + gold/purple accents). The light tokens in globals.css are still
- * shadcn neutral defaults; finishing them is a future-fix. We pin `dark` here
- * so light theme can never sneak in via system preference. */
+/** El usuario puede elegir tema claro u oscuro. Default = oscuro (el copilot
+ *  está pensado para sesiones largas mirando charts). El claro usa una paleta
+ *  cálida (arena/parchment, hue 80) — no blanco neutro. */
 function ThemeProvider({
   children,
   ...props
@@ -16,7 +15,6 @@ function ThemeProvider({
       defaultTheme="dark"
       enableSystem={false}
       disableTransitionOnChange
-      forcedTheme="dark"
       {...props}
     >
       {children}

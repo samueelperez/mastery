@@ -7,6 +7,7 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,80 +53,169 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    /* Light theme — off-white neutro (hue 260, mismo eje cool que el dark
+       mode, invertido en lightness). Limpio tipo Linear/Notion/GitHub,
+       pareja natural con Geist Sans. Los acentos (violet, amber, long,
+       short) hacen el peso del color del producto, no las surfaces.
+       El texto está en navy oscuro (hue 260) — fg y bg comparten eje
+       para máximo contraste sin tinte cálido. */
+
+    /* surfaces — 5 niveles off-white neutro */
+    --bg-0: oklch(0.985 0.002 260);                     /* canvas */
+    --bg-1: oklch(0.970 0.003 260);                     /* panel */
+    --bg-2: oklch(0.945 0.004 260);                     /* elevated */
+    --bg-3: oklch(0.910 0.005 260);                     /* hover */
+    --bg-inset: oklch(0.995 0.001 260);                 /* inset wells */
+
+    /* lines — 3 niveles, gap visual similar al diseño previo */
+    --line: oklch(0.82 0.005 260);
+    --line-strong: oklch(0.68 0.006 260);
+    --line-soft: oklch(0.92 0.003 260);
+
+    /* text — 5 niveles (navy oscuro sobre arena) */
+    --fg: oklch(0.18 0.012 260);
+    --fg-1: oklch(0.30 0.014 260);
+    --fg-2: oklch(0.46 0.014 260);
+    --fg-3: oklch(0.58 0.014 260);
+    --fg-4: oklch(0.70 0.014 260);
+
+    /* accents — más oscuros que dark para contraste sobre arena */
+    --violet: oklch(0.50 0.20 290);
+    --violet-bg: oklch(0.92 0.06 290);
+    --violet-soft: oklch(0.88 0.08 290 / 0.5);
+
+    --amber: oklch(0.65 0.18 75);
+    --amber-bg: oklch(0.92 0.06 75);
+    --amber-soft: oklch(0.88 0.08 75 / 0.4);
+
+    /* market semantic */
+    --long: oklch(0.55 0.17 152);
+    --long-bg: oklch(0.92 0.05 152 / 0.5);
+    --short: oklch(0.55 0.20 22);
+    --short-bg: oklch(0.92 0.05 22 / 0.5);
+
+    /* shadcn semantic mapping */
+    --background: var(--bg-0);
+    --foreground: var(--fg);
+    --card: var(--bg-1);
+    --card-foreground: var(--fg);
+    --popover: var(--bg-1);
+    --popover-foreground: var(--fg);
+    --primary: var(--amber);
+    --primary-foreground: var(--bg-0);
+    --secondary: var(--bg-2);
+    --secondary-foreground: var(--fg-1);
+    --muted: var(--bg-2);
+    --muted-foreground: var(--fg-2);
+    --accent: var(--violet);
+    --accent-foreground: var(--bg-0);
+    --destructive: var(--short);
+    --warning: var(--amber);
+    --warning-foreground: var(--bg-0);
+    --success: var(--long);
+    --success-foreground: var(--bg-0);
+    --border: var(--line);
+    --input: var(--line);
+    --ring: var(--violet);
+
+    /* chart palette */
+    --chart-1: var(--amber);
+    --chart-2: var(--violet);
+    --chart-3: var(--long);
+    --chart-4: var(--short);
+    --chart-5: var(--fg-3);
+
+    --radius: 0.5rem;
+
+    --sidebar: var(--bg-1);
+    --sidebar-foreground: var(--fg);
+    --sidebar-primary: var(--amber);
+    --sidebar-primary-foreground: var(--bg-0);
+    --sidebar-accent: var(--violet);
+    --sidebar-accent-foreground: var(--bg-0);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--violet);
 }
 
 .dark {
-    /* Trading copilot MASTER design system: gold + purple on slate.
-       Source values: #0F172A bg, #F59E0B primary (gold), #8B5CF6 accent (purple),
-       #EF4444 destructive, slate-700 borders. OKLCH equivalents from Tailwind v4. */
-    --background: oklch(0.208 0.042 265.755);          /* slate-900 #0F172A */
-    --foreground: oklch(0.984 0.003 247.858);          /* slate-50 */
-    --card: oklch(0.279 0.041 260.031);                /* slate-800 — elevated surface */
-    --card-foreground: oklch(0.984 0.003 247.858);
-    --popover: oklch(0.279 0.041 260.031);
-    --popover-foreground: oklch(0.984 0.003 247.858);
-    --primary: oklch(0.769 0.188 70.08);               /* gold #F59E0B — trust + price-up */
-    --primary-foreground: oklch(0.208 0.042 265.755);  /* slate-900 — dark text on gold */
-    --secondary: oklch(0.372 0.044 257.287);           /* slate-700 */
-    --secondary-foreground: oklch(0.984 0.003 247.858);
-    --muted: oklch(0.30 0.034 258);                    /* between slate-700/800 */
-    --muted-foreground: oklch(0.704 0.04 256.788);     /* slate-400 */
-    --accent: oklch(0.606 0.25 292.717);               /* purple #8B5CF6 — CTA */
-    --accent-foreground: oklch(0.984 0.003 247.858);
-    --destructive: oklch(0.637 0.237 25.331);          /* red #EF4444 — price-down */
-    --warning: oklch(0.84 0.18 80);                    /* amber #FACC15 — caution / partial outage */
-    --warning-foreground: oklch(0.208 0.042 265.755);
-    --success: oklch(0.696 0.17 162.48);               /* emerald-500 — pos series, "live" */
-    --success-foreground: oklch(0.208 0.042 265.755);
-    --border: oklch(0.372 0.044 257.287);              /* slate-700 — solid, not transparent */
-    --input: oklch(0.372 0.044 257.287);
-    --ring: oklch(0.769 0.188 70.08);                  /* gold focus ring */
-    /* Chart palette: gold/purple primaries + emerald/red for explicit positive/negative. */
-    --chart-1: oklch(0.769 0.188 70.08);               /* gold */
-    --chart-2: oklch(0.606 0.25 292.717);              /* purple */
-    --chart-3: oklch(0.696 0.17 162.48);               /* emerald-500 — positive series */
-    --chart-4: oklch(0.637 0.237 25.331);              /* red — negative series */
-    --chart-5: oklch(0.704 0.04 256.788);              /* slate-400 — neutral */
-    --sidebar: oklch(0.279 0.041 260.031);
-    --sidebar-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-primary: oklch(0.769 0.188 70.08);
-    --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
-    --sidebar-accent: oklch(0.606 0.25 292.717);
-    --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-border: oklch(0.372 0.044 257.287);
-    --sidebar-ring: oklch(0.769 0.188 70.08);
+    /* Trading copilot — adopted Claude Design tokens (F4).
+       Identity: deep desaturated navy + amber (CTAs, hero numbers) +
+       violet (active states, focus, "selected"). Long/short = green/red
+       with explicit market semantic. JetBrains Mono = body. */
+
+    /* surfaces — 5 levels */
+    --bg-0: oklch(0.155 0.015 260);                     /* canvas */
+    --bg-1: oklch(0.185 0.018 260);                     /* panel */
+    --bg-2: oklch(0.215 0.020 260);                     /* elevated */
+    --bg-3: oklch(0.255 0.022 260);                     /* hover */
+    --bg-inset: oklch(0.135 0.014 260);                 /* inset wells */
+
+    /* lines — 3 levels */
+    --line: oklch(0.285 0.020 260);
+    --line-strong: oklch(0.355 0.022 260);
+    --line-soft: oklch(0.235 0.018 260);
+
+    /* text — 5 levels */
+    --fg: oklch(0.96 0.005 260);
+    --fg-1: oklch(0.82 0.010 260);
+    --fg-2: oklch(0.62 0.012 260);
+    --fg-3: oklch(0.46 0.014 260);
+    --fg-4: oklch(0.36 0.014 260);
+
+    /* accents — same chroma family */
+    --violet: oklch(0.68 0.18 290);
+    --violet-bg: oklch(0.32 0.12 290);
+    --violet-soft: oklch(0.28 0.08 290 / 0.4);
+
+    --amber: oklch(0.78 0.16 75);
+    --amber-bg: oklch(0.42 0.12 75);
+    --amber-soft: oklch(0.32 0.08 75 / 0.3);
+
+    /* market semantic */
+    --long: oklch(0.74 0.17 152);
+    --long-bg: oklch(0.32 0.10 152 / 0.35);
+    --short: oklch(0.68 0.20 22);
+    --short-bg: oklch(0.32 0.12 22 / 0.35);
+
+    /* shadcn semantic mapping — components inherit automatically */
+    --background: var(--bg-0);
+    --foreground: var(--fg);
+    --card: var(--bg-1);
+    --card-foreground: var(--fg);
+    --popover: var(--bg-1);
+    --popover-foreground: var(--fg);
+    --primary: var(--amber);                            /* hero numbers, primary CTAs */
+    --primary-foreground: var(--bg-0);
+    --secondary: var(--bg-2);
+    --secondary-foreground: var(--fg-1);
+    --muted: var(--bg-2);
+    --muted-foreground: var(--fg-2);
+    --accent: var(--violet);                            /* active states, focus */
+    --accent-foreground: var(--fg);
+    --destructive: var(--short);                        /* short / down */
+    --warning: var(--amber);
+    --warning-foreground: var(--bg-0);
+    --success: var(--long);                             /* long / up */
+    --success-foreground: var(--bg-0);
+    --border: var(--line);
+    --input: var(--line);
+    --ring: var(--violet);                              /* focus ring */
+
+    /* chart palette: amber/violet primaries + long/short for explicit semantic */
+    --chart-1: var(--amber);
+    --chart-2: var(--violet);
+    --chart-3: var(--long);
+    --chart-4: var(--short);
+    --chart-5: var(--fg-3);
+
+    --sidebar: var(--bg-1);
+    --sidebar-foreground: var(--fg);
+    --sidebar-primary: var(--amber);
+    --sidebar-primary-foreground: var(--bg-0);
+    --sidebar-accent: var(--violet);
+    --sidebar-accent-foreground: var(--fg);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--violet);
 }
 
 @layer base {
@@ -134,8 +224,131 @@
     }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* feature-settings: dejamos solo lo que aplica a Geist Sans (cv11 le da
+       cifras tabulares friendlier). El mono mantiene sus ss01/ss02/cv01/zero
+       cuando se usa font-family: var(--font-mono) explícitamente. */
+    font-feature-settings: 'cv11';
     }
   html {
     @apply font-sans;
     }
+  ::selection {
+    background: var(--violet-bg);
+    color: var(--fg);
+    }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 6px;
+    border: 2px solid var(--bg-0);
+    }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+}
+
+/* ============ design-system atoms ============ */
+
+@layer components {
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 2px 5px;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    color: var(--fg-2);
+    background: var(--bg-2);
+    letter-spacing: 0.02em;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .dot-live   { background: var(--long);   box-shadow: 0 0 8px var(--long);   animation: dot-pulse 1.6s ease-in-out infinite; }
+  .dot-amber  { background: var(--amber); }
+  .dot-violet { background: var(--violet); }
+  .dot-short  { background: var(--short); }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  .grid-bg {
+    background-image:
+      radial-gradient(circle at 1px 1px, oklch(0.36 0.02 260 / 0.18) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  .scan-bg {
+    background:
+      repeating-linear-gradient(0deg,  transparent 0 47px, oklch(0.36 0.02 260 / 0.06) 47px 48px),
+      repeating-linear-gradient(90deg, transparent 0 47px, oklch(0.36 0.02 260 / 0.06) 47px 48px);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg-2);
+    letter-spacing: 0.04em;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    font-family: var(--font-mono);
+  }
+
+  .pill-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+  .pill-status-ok    { background: var(--long-bg);   color: var(--long);   border-color: oklch(0.45 0.10 152 / 0.5); }
+  .pill-status-warn  { background: var(--amber-soft); color: var(--amber); border-color: oklch(0.55 0.14 75 / 0.5); }
+  .pill-status-err   { background: var(--short-bg);  color: var(--short);  border-color: oklch(0.45 0.18 22 / 0.5); }
+  .pill-status-info  { background: var(--violet-soft); color: var(--violet); border-color: oklch(0.55 0.16 290 / 0.5); }
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@keyframes cursor-blink {
+  0%, 50%       { opacity: 1; }
+  50.01%, 100%  { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-live { animation: none; }
+  [class*="cursor-blink"] { animation: none !important; }
 }

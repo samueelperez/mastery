@@ -1,8 +1,8 @@
 "use client"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, KeyRound, Loader2, Mail } from "lucide-react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { ArrowRight, KeyRound, Loader2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 
 import { BrandWordmark } from "@/components/auth/BrandWordmark"
@@ -19,14 +19,9 @@ import { cn } from "@/lib/utils"
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true"
 
-const CARD_BASE =
-  "w-full max-w-md rounded-xl bg-card/95 p-8 ring-1 ring-border shadow-2xl shadow-black/40 backdrop-blur-sm"
-const CARD_ENTER =
-  "animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out motion-reduce:animate-none"
-
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
       <path
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
         fill="#4285F4"
@@ -47,6 +42,14 @@ function GoogleIcon() {
   )
 }
 
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden fill="currentColor">
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.04c-3.2.7-3.87-1.36-3.87-1.36-.52-1.31-1.27-1.66-1.27-1.66-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.27-5.24-5.66 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.17a10.94 10.94 0 0 1 5.74 0c2.19-1.48 3.15-1.17 3.15-1.17.62 1.58.23 2.75.11 3.04.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.36-5.25 5.65.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z" />
+    </svg>
+  )
+}
+
 export default function LoginPage() {
   return (
     <Suspense>
@@ -56,7 +59,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const rawRedirect = searchParams.get("redirect") ?? "/"
@@ -64,13 +66,12 @@ function LoginForm() {
     rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
       ? rawRedirect
       : "/"
-  const [showEmailForm, setShowEmailForm] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  async function handleEmailLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
     setLoading(true)
@@ -84,112 +85,128 @@ function LoginForm() {
     window.location.assign(redirectTo)
   }
 
-  if (showEmailForm) {
-    return (
-      <>
-        <div className={cn(CARD_BASE, CARD_ENTER)}>
-          <button
-            type="button"
-            onClick={() => {
-              setShowEmailForm(false)
-              setError("")
-            }}
-            className="-ml-1 mb-4 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden />
-            atrás
-          </button>
-
-          <div className="mb-6 flex flex-col items-center">
-            <BrandWordmark caption="correo + contraseña" />
-          </div>
-
-          <form onSubmit={handleEmailLogin} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="email"
-                className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
-              >
-                Correo electrónico
-              </Label>
-              <InputGroup>
-                <InputGroupAddon>
-                  <Mail aria-hidden />
-                </InputGroupAddon>
-                <InputGroupInput
-                  id="email"
-                  type="email"
-                  placeholder="tu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </InputGroup>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="password"
-                className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground"
-              >
-                Contraseña
-              </Label>
-              <InputGroup>
-                <InputGroupAddon>
-                  <KeyRound aria-hidden />
-                </InputGroupAddon>
-                <InputGroupInput
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </InputGroup>
-            </div>
-
-            {error && (
-              <p
-                role="alert"
-                className="font-mono text-[11px] uppercase tracking-widest text-destructive"
-              >
-                {error}
-              </p>
-            )}
-
-            <Button type="submit" disabled={loading} className="mt-1 w-full">
-              {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
-              Acceder
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/auth/login")}
-              className="text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-            >
-              ¿olvidaste tu contraseña?
-            </button>
-          </form>
-        </div>
-      </>
-    )
-  }
-
   return (
     <>
-      <div className={cn(CARD_BASE, CARD_ENTER)}>
-        <div className="mb-6 flex flex-col items-center">
-          <BrandWordmark caption="sesión segura" />
+      <div className="flex flex-col gap-6 motion-reduce:animate-none animate-in fade-in slide-in-from-bottom-2 duration-200 ease-out">
+        <BrandWordmark caption="acceso · sesión segura" />
+
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--fg-3)]">
+          <span className="dot dot-amber" aria-hidden />
+          <span>paso 01</span>
+          <span className="text-[var(--fg-4)]">·</span>
+          <span className="text-[var(--fg-1)]">acceder</span>
         </div>
 
-        <div className="flex flex-col gap-2.5">
+        <h1 className="font-mono text-[22px] tracking-tight text-foreground">
+          Entra a tu cabina
+        </h1>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="email"
+              className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)]"
+            >
+              Correo electrónico
+            </Label>
+            <InputGroup>
+              <InputGroupAddon>
+                <span
+                  aria-hidden
+                  className="font-mono text-[14px] text-[var(--violet)]"
+                >
+                  @
+                </span>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="email"
+                type="email"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+              />
+            </InputGroup>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="password"
+              className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)]"
+            >
+              Contraseña
+            </Label>
+            <InputGroup>
+              <InputGroupAddon>
+                <KeyRound aria-hidden />
+              </InputGroupAddon>
+              <InputGroupInput
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </InputGroup>
+          </div>
+
+          {error && (
+            <p
+              role="alert"
+              className="font-mono text-[11px] uppercase tracking-widest text-destructive"
+            >
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || email.length === 0 || password.length === 0}
+            className={cn(
+              "group mt-1 flex h-11 items-center justify-center gap-2 rounded-md",
+              "bg-[var(--amber)] text-[var(--bg-0)]",
+              "font-mono text-[12px] font-semibold uppercase tracking-[0.18em]",
+              "transition-all duration-150 hover:brightness-110",
+              "disabled:cursor-not-allowed disabled:opacity-40",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
+            )}
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : (
+              <>
+                <span>Acceder</span>
+                <ArrowRight
+                  className="size-4 transition-transform duration-150 group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" aria-hidden />
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)]">
+            o continúa con
+          </span>
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </div>
+
+        <div
+          className={cn(
+            "grid gap-2",
+            GOOGLE_ENABLED ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
           {GOOGLE_ENABLED && (
             <Button
+              type="button"
               variant="outline"
-              size="lg"
-              className="w-full justify-center gap-3"
+              className="h-10 justify-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em]"
               onClick={() => {
                 authClient.signIn.social({
                   provider: "google",
@@ -198,28 +215,30 @@ function LoginForm() {
               }}
             >
               <GoogleIcon />
-              Acceder con Google
+              Google
             </Button>
           )}
-
           <Button
+            type="button"
             variant="outline"
-            size="lg"
-            className="w-full justify-center gap-3"
-            onClick={() => setShowEmailForm(true)}
+            disabled
+            className="h-10 justify-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] opacity-60"
+            title="próximamente"
           >
-            <Mail className="size-5" aria-hidden />
-            Acceder con correo electrónico
+            <GitHubIcon />
+            GitHub
           </Button>
         </div>
 
-        <p className="mt-6 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          intérprete y orquestador · nunca un oráculo
+        <p className="text-center font-mono text-[10px] leading-relaxed tracking-[0.06em] text-[var(--fg-3)]">
+          al acceder aceptas el flujo determinista —
+          <br />
+          el copilot interpreta y orquesta, nunca predice.
         </p>
       </div>
 
-      {/* Mobile only — desktop renders the LivePulse inside AuthShowcase. */}
-      <div className="mt-6 lg:hidden">
+      {/* Mobile only — desktop renders LivePulse inside AuthShowcase */}
+      <div className="mt-8 lg:hidden">
         <LivePulse />
       </div>
     </>

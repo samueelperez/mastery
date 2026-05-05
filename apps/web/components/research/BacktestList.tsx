@@ -1,12 +1,13 @@
 "use client"
 
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { AlertTriangleIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { BacktestRunSummaryDTO } from "@/lib/api"
+import { cn } from "@/lib/utils"
+import { fetchBacktest, type BacktestRunSummaryDTO } from "@/lib/api"
 
 interface BacktestListProps {
   runs: BacktestRunSummaryDTO[]
@@ -15,6 +16,19 @@ interface BacktestListProps {
 }
 
 export function BacktestList({ runs, loading, error }: BacktestListProps) {
+  const queryClient = useQueryClient()
+  // Prefetch del detail cuando el usuario pasa el mouse por la fila — al
+  // click la transición a /research/backtests/[id] es instantánea porque
+  // los datos ya están en cache. El prefetch tiene staleTime largo para
+  // que un hover seguido de click no dispare 2 fetches.
+  const prefetchDetail = (id: string) => {
+    void queryClient.prefetchQuery({
+      queryKey: ["backtest", id],
+      queryFn: ({ signal }) => fetchBacktest(id, { signal }),
+      staleTime: 60_000,
+    })
+  }
+
   if (loading && runs.length === 0) {
     return (
       <div className="flex flex-col gap-2">
@@ -30,10 +44,8 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
   if (runs.length === 0) {
     return (
       <Card className="border-dashed border-border bg-card/20 p-6 text-center">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          aún no hay backtests
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="eyebrow">aún no hay backtests</p>
+        <p className="mt-2 text-xs text-[var(--fg-2)]">
           Pídele al copiloto:{" "}
           <span className="font-mono text-foreground">
             &ldquo;haz backtest de ema_cross 21/55 BTCUSDT 4h&rdquo;
@@ -45,8 +57,8 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
 
   return (
     <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full min-w-[40rem] text-xs">
-        <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
+      <table className="w-full min-w-[44rem] text-xs">
+        <thead className="bg-[oklch(0.18_0.018_260)]">
           <tr>
             <Th>estrategia</Th>
             <Th>símbolo</Th>
@@ -59,18 +71,18 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
             <Th>estado</Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border/30">
+        <tbody className="divide-y divide-[color:var(--line-soft)]">
           {runs.map((r) => (
             <tr
               key={r.id}
-              className="relative transition-colors duration-150 ease-out hover:bg-accent/10 focus-within:bg-accent/15"
+              onMouseEnter={() => prefetchDetail(r.id)}
+              onFocus={() => prefetchDetail(r.id)}
+              className="relative transition-colors duration-150 ease-out hover:bg-[var(--bg-2)] focus-within:bg-[var(--violet-soft)]"
             >
-              {/* Stretched-link pattern: keeps native <table>/<tr>/<td> semantics
-                  for screen readers; clicking anywhere on the row navigates. */}
               <Td>
                 <Link
                   href={`/research/backtests/${r.id}`}
-                  className="font-mono text-foreground hover:text-primary after:absolute after:inset-0 after:content-[''] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+                  className="font-mono text-foreground after:absolute after:inset-0 after:content-[''] hover:text-[var(--violet)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                 >
                   {r.strategy_id}
                 </Link>
@@ -81,7 +93,7 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
                 {fmt(r.metrics?.sharpe)}
               </Td>
               <Td align="right" mono>
-                {fmt(r.metrics?.deflated_sharpe)}
+                <DsrCell value={r.metrics?.deflated_sharpe ?? null} />
               </Td>
               <Td align="right" mono>
                 {pct(r.metrics?.max_drawdown)}
@@ -94,12 +106,12 @@ export function BacktestList({ runs, loading, error }: BacktestListProps) {
               </Td>
               <Td>
                 {r.metrics?.overfit_warning ? (
-                  <Badge variant="destructive" className="gap-1">
+                  <span className="pill-status pill-status-warn">
                     <AlertTriangleIcon className="size-3" />
                     overfit
-                  </Badge>
+                  </span>
                 ) : (
-                  <Badge variant="secondary">ok</Badge>
+                  <span className="pill-status pill-status-ok">ok</span>
                 )}
               </Td>
             </tr>
@@ -119,7 +131,10 @@ function Th({
 }) {
   return (
     <th
-      className={`px-3 py-2 pointer-coarse:py-4 font-medium ${align === "right" ? "text-right" : "text-left"}`}
+      className={cn(
+        "px-3 py-2 pointer-coarse:py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)] font-medium",
+        align === "right" ? "text-right" : "text-left",
+      )}
     >
       {children}
     </th>
@@ -137,10 +152,40 @@ function Td({
 }) {
   return (
     <td
-      className={`px-3 py-2 pointer-coarse:py-4 ${align === "right" ? "text-right" : "text-left"} ${mono ? "font-mono tabular-nums" : ""}`}
+      className={cn(
+        "px-3 py-2 pointer-coarse:py-4",
+        align === "right" ? "text-right" : "text-left",
+        mono && "font-mono tabular-nums",
+      )}
     >
       {children}
     </td>
+  )
+}
+
+/** Cell DSR con barra mini (60×4px) que escala 0..1.5 → 0..100%. */
+function DsrCell({ value }: { value: number | null }) {
+  if (value === null || value === undefined) return <span>—</span>
+  const pctFill = Math.max(0, Math.min(1, value / 1.5)) * 100
+  const tone =
+    value >= 0.95
+      ? "var(--amber)"
+      : value >= 0.5
+        ? "var(--violet)"
+        : "var(--fg-3)"
+  return (
+    <span className="inline-flex items-center justify-end gap-2">
+      <span
+        aria-hidden
+        className="hidden h-1 w-[60px] overflow-hidden rounded-sm bg-[var(--bg-3)] sm:inline-block"
+      >
+        <span
+          className="block h-full rounded-sm"
+          style={{ width: `${pctFill}%`, background: tone }}
+        />
+      </span>
+      <span style={{ color: tone }}>{value.toFixed(2)}</span>
+    </span>
   )
 }
 

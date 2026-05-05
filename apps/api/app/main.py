@@ -13,11 +13,13 @@ from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.journal import router as journal_router
 from app.api.ohlcv import router as ohlcv_router
+from app.api.strategies import router as strategies_router
 from app.api.ws import router as ws_router
 from app.broadcasting.pubsub import close_client as close_valkey
 from app.config import get_settings
 from app.db import dispose_engine, init_engine
 from app.ingestion.live_klines import LiveIngestion
+from app.runtime.setup_runtime import SetupRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 structlog.configure(
@@ -35,13 +37,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_engine()
     ingestion = LiveIngestion()
     alerts = AlertsRuntime()
+    setups = SetupRuntime()
     await ingestion.start()
     await alerts.start()
+    await setups.start()
     log.info("api.start")
     try:
         yield
     finally:
         log.info("api.stop")
+        await setups.stop()
         await alerts.stop()
         await ingestion.stop()
         await close_valkey()
@@ -69,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(ws_router)
     app.include_router(chat_router)
     app.include_router(backtests_router)
+    app.include_router(strategies_router)
     app.include_router(journal_router)
     app.include_router(alerts_router)
     return app

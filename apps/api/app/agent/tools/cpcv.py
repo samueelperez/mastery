@@ -76,8 +76,11 @@ def register_cpcv_tool(agent: Agent[AgentDeps, object]) -> None:
             n_paths=result.n_paths,
             sharpe_p50=result.sharpe_p50,
             dsr=result.deflated_sharpe,
-            pbo=result.pbo,
         )
+        # NOTA: `pbo` se omite del payload al LLM hasta que F-stat-quant
+        # implemente CPCV honesto. El cálculo actual no es el PBO de López
+        # de Prado y citarlo sería engañoso. `overfit_warning` viene del
+        # DSR (correcto) y es la única señal de overfit que el agente cita.
         return ToolResult(
             data={
                 "strategy_id": strategy_id,
@@ -88,7 +91,6 @@ def register_cpcv_tool(agent: Agent[AgentDeps, object]) -> None:
                 "sharpe_p50": result.sharpe_p50,
                 "sharpe_p75": result.sharpe_p75,
                 "deflated_sharpe": result.deflated_sharpe,
-                "pbo": result.pbo,
                 "overfit_warning": result.overfit_warning,
             },
             provenance=Provenance(
@@ -96,7 +98,7 @@ def register_cpcv_tool(agent: Agent[AgentDeps, object]) -> None:
                 as_of=until or datetime.now(),
                 rows=result.n_paths,
                 warnings=(
-                    [f"DSR={result.deflated_sharpe} < 0.5 OR PBO={result.pbo} > 0.5: overfit"]
+                    [f"DSR={result.deflated_sharpe} < 0.5: overfit warning"]
                     if result.overfit_warning
                     else []
                 ),

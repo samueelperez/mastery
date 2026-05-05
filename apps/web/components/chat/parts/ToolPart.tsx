@@ -7,6 +7,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool"
+import { toolLabel } from "@/lib/tool-labels"
 import type { DynamicToolUIPart, ToolUIPart } from "ai"
 
 interface ToolPartProps {
@@ -36,8 +37,8 @@ export function ToolPart({ part }: ToolPartProps) {
       <ToolHeader
         type={part.type as never}
         state={part.state}
-        toolName={isDynamic ? toolName : undefined}
-        title={isDynamic ? undefined : toolName.replace(/_/g, " ")}
+        toolName={isDynamic ? toolLabel(toolName) : undefined}
+        title={isDynamic ? undefined : toolLabel(toolName)}
       />
       <ToolContent>
         {part.input ? <ToolInput input={part.input} /> : null}

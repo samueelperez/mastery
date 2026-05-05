@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -49,7 +48,7 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full min-w-[34rem] text-xs">
-          <thead className="bg-card text-[11px] uppercase tracking-widest text-muted-foreground">
+          <thead className="bg-[oklch(0.18_0.018_260)]">
             <tr>
               <Th>fecha</Th>
               <Th>símbolo</Th>
@@ -60,14 +59,15 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
               <Th>modo</Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/30">
+          <tbody className="divide-y divide-[color:var(--line-soft)]">
             {trades.map((t) => (
               <tr
                 key={t.id}
                 className={cn(
-                  "relative transition-colors duration-150 ease-out hover:bg-accent/10",
-                  "focus-within:bg-accent/15",
-                  selected?.id === t.id && "bg-accent/20",
+                  "relative transition-colors duration-150 ease-out hover:bg-[var(--bg-2)]",
+                  "focus-within:bg-[var(--violet-soft)]",
+                  selected?.id === t.id &&
+                    "bg-[var(--violet-soft)] shadow-[inset_0_0_0_1px_oklch(0.55_0.16_290_/_0.4)]",
                 )}
               >
                 {/* Stretched-button pattern: keeps native <table>/<tr>/<td>
@@ -88,26 +88,24 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
                   <span className="ml-1 text-muted-foreground">{t.timeframe}</span>
                 </Td>
                 <Td>
-                  <Badge
-                    variant={t.side === "long" ? "default" : "secondary"}
-                    className={
-                      t.side === "long"
-                        ? "bg-primary/20 text-primary hover:bg-primary/30"
-                        : ""
-                    }
+                  <span
+                    className={cn(
+                      "pill-status",
+                      t.side === "long" ? "pill-status-ok" : "pill-status-err",
+                    )}
                   >
                     {t.side}
-                  </Badge>
+                  </span>
                 </Td>
                 <Td
                   align="right"
                   mono
                   className={
                     t.r_multiple === null
-                      ? "text-muted-foreground"
+                      ? "text-[var(--fg-3)]"
                       : t.r_multiple > 0
-                        ? "text-primary"
-                        : "text-destructive"
+                        ? "text-[var(--long)]"
+                        : "text-[var(--short)]"
                   }
                 >
                   {t.r_multiple === null
@@ -115,8 +113,8 @@ export function JournalList({ trades, loading, error }: JournalListProps) {
                     : `${t.r_multiple > 0 ? "+" : ""}${t.r_multiple.toFixed(2)}R`}
                 </Td>
                 <Td>{t.setup_tag}</Td>
-                <Td className="text-muted-foreground">{t.regime}</Td>
-                <Td className="text-muted-foreground text-[11px] uppercase">
+                <Td className="text-[var(--fg-2)]">{t.regime}</Td>
+                <Td className="text-[var(--fg-3)] text-[10px] uppercase tracking-[0.08em]">
                   {t.mode.replace("_", " ")}
                 </Td>
               </tr>
@@ -148,7 +146,10 @@ function Th({
 }) {
   return (
     <th
-      className={`px-3 py-2 pointer-coarse:py-4 font-medium ${align === "right" ? "text-right" : "text-left"}`}
+      className={cn(
+        "px-3 py-2 pointer-coarse:py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-3)] font-medium",
+        align === "right" ? "text-right" : "text-left",
+      )}
     >
       {children}
     </th>

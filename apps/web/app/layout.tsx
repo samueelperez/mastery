@@ -1,11 +1,19 @@
-import { Inter, JetBrains_Mono } from "next/font/google"
+import { Geist, JetBrains_Mono } from "next/font/google"
 
 import "./globals.css"
 import { GlobalNav } from "@/components/nav/GlobalNav"
+import { Statusbar } from "@/components/nav/Statusbar"
 import { Providers } from "@/components/providers"
 import { cn } from "@/lib/utils"
 
-const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" })
+// Geist Sans (Vercel) pareja con JetBrains Mono — geometría coherente.
+// Sustituye a Inter_Tight, que estaba cargada pero el body forzaba mono
+// y nunca se aplicaba.
+const sans = Geist({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+})
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
@@ -13,7 +21,7 @@ const mono = JetBrains_Mono({
 })
 
 export const metadata = {
-  title: "Trading Copilot",
+  title: "Mastery Trader",
   description: "Copilot de trading cripto — intérprete y orquestador, nunca un oráculo.",
 }
 
@@ -28,10 +36,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("antialiased", sans.variable, mono.variable, "font-sans")}
     >
-      <body className="bg-background text-foreground">
+      <body className="flex h-dvh flex-col bg-background text-foreground">
         <Providers>
           <GlobalNav />
-          {children}
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          <Statusbar />
         </Providers>
       </body>
     </html>

@@ -1,31 +1,29 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
-import { JournalList } from "@/components/research/JournalList"
-import { fetchJournalTrades } from "@/lib/api"
+import { Spinner } from "@/components/ui/spinner"
 
-export default function JournalPage() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["journal-trades", { limit: 100 }],
-    queryFn: ({ signal }) => fetchJournalTrades({ limit: 100, signal }),
-  })
+/** /research/journal está deprecado. El Diario unificado vive en /journal
+ *  desde el rediseño de mayo 2026 — combina setups del agente y trades
+ *  importados con un toggle de fuente. Esta ruta hace soft-redirect para
+ *  mantener bookmarks viejos funcionando sin romper. */
+export default function DeprecatedResearchJournal() {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace("/journal")
+  }, [router])
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-mono text-sm uppercase tracking-widest text-foreground">
-          diario
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {data?.length ?? 0} trades · embedded con voyage-4-large para búsqueda por similitud.
-        </p>
-      </div>
-      <JournalList
-        trades={data ?? []}
-        loading={isLoading}
-        error={error?.message}
-      />
+    <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+      <Spinner />
+      <p className="text-[14px] text-foreground">
+        El Diario se ha unificado en <code className="font-mono">/journal</code>
+      </p>
+      <p className="text-[12px] text-muted-foreground">
+        Te llevamos allí…
+      </p>
     </div>
   )
 }

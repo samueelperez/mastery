@@ -43,13 +43,105 @@ export function formatTimeAgo(ts: string, now: Date = new Date()): string {
   return `hace ${Math.floor(hr / 24)}d`
 }
 
-/** "rsi_14 <= 30 Y ema_21 cross_above ema_55" — used by AlertList + AlertCreatedCard.
- *  Operadores y nombres de columna se quedan en EN (jargon canónico). */
+/** Pretty-print de una condición DSL: traduce nombres técnicos de
+ *  columna (rsi_14, ema_21, c) a etiquetas humanas (RSI(14), EMA21,
+ *  Precio) y operadores a símbolos / castellano (≤, "cruza por encima
+ *  de"). Usado por AlertCreatedCard, RuleCard y AlertEventFeed. */
 export function summarizeAlertConditions(
   conds: AlertConditionDTO[],
   logic: "all" | "any",
 ): string {
-  const parts = conds.map((c) => `${c.left} ${c.op} ${c.right}`)
+  if (conds.length === 0) return "(sin condiciones)"
+  const parts = conds.map(formatCondition)
   if (parts.length === 1) return parts[0]
   return parts.join(logic === "all" ? " Y " : " O ")
+}
+
+function formatCondition(c: AlertConditionDTO): string {
+  const left = formatColumn(c.left)
+  const op = formatOperator(c.op)
+  const right =
+    typeof c.right === "number" ? formatNumber(c.right) : formatColumn(c.right)
+  // Cross operators usan sintaxis de frase ("X cruza por encima de Y").
+  // Comparadores numéricos van en notación matemática ("X ≥ Y").
+  if (c.op === "cross_above" || c.op === "cross_below") {
+    return `${left} ${op} ${right}`
+  }
+  return `${left} ${op} ${right}`
+}
+
+function formatColumn(col: string): string {
+  // OHLCV columnas base.
+  const base: Record<string, string> = {
+    c: "Precio",
+    o: "Apertura",
+    h: "Máximo",
+    l: "Mínimo",
+    v: "Volumen",
+    bb_lower: "BB Lower",
+    bb_mid: "BB Mid",
+    bb_upper: "BB Upper",
+    vwap: "VWAP",
+    macd_line: "MACD",
+    macd_signal: "MACD señal",
+    macd_hist: "MACD hist",
+  }
+  if (base[col]) return base[col]
+
+  // Indicators con length: rsi_14, ema_21, sma_50, atr_14, adx_14.
+  // Convención: notación funcional para osciladores ("RSI(14)") y postfija
+  // para medias móviles ("EMA21").
+  const m = /^(rsi|ema|sma|atr|adx)_(\d+)$/.exec(col)
+  if (m) {
+    const [, name, length] = m
+    const upper = name.toUpperCase()
+    if (name === "ema" || name === "sma") return `${upper}${length}`
+    return `${upper}(${length})`
+  }
+  // Fallback: dejar el nombre técnico tal cual.
+  return col
+}
+
+function formatOperator(op: AlertConditionDTO["op"]): string {
+  switch (op) {
+    case "<=":
+      return "≤"
+    case ">=":
+      return "≥"
+    case "==":
+      return "="
+    case "<":
+      return "<"
+    case ">":
+      return ">"
+    case "cross_above":
+      return "cruza por encima de"
+    case "cross_below":
+      return "cruza por debajo de"
+  }
+}
+
+function formatNumber(n: number): string {
+  // Decimales largos (e.g., 0.0001) se muestran completos; enteros sin
+  // separador de miles para no inflar.
+  if (Number.isInteger(n)) return String(n)
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 })
+}
+
+/** "1h" / "30m" / "45s" / "sin cooldown". Usado por RuleCard + AlertCreatedCard. */
+export function formatCooldown(seconds: number): string {
+  if (seconds <= 0) return "sin cooldown"
+  if (seconds >= 86400) {
+    const d = Math.round(seconds / 86400)
+    return `${d}d`
+  }
+  if (seconds >= 3600) {
+    const h = Math.round(seconds / 3600)
+    return `${h}h`
+  }
+  if (seconds >= 60) {
+    const m = Math.round(seconds / 60)
+    return `${m}m`
+  }
+  return `${seconds}s`
 }

@@ -109,3 +109,72 @@ class BinanceAdapter:
             )
             # CCXT returns a list of recent klines; the last one is the live one.
             yield normalized[-1]
+
+    # -------------------------------------------------------------------------
+    # REST: funding rate (perpetuals).
+    # -------------------------------------------------------------------------
+
+    async def fetch_funding_rate(self, symbol: str) -> dict:
+        """Current funding rate for a perpetual contract.
+
+        Returns CCXT-normalized dict with keys: `fundingRate` (decimal, e.g.
+        0.0001 = 0.01% per 8h), `fundingTimestamp`, `nextFundingTimestamp`.
+        Binance USDT-M perps cobran funding cada 8h (00:00, 08:00, 16:00 UTC).
+        """
+        return await self.client.fetch_funding_rate(symbol)
+
+    async def fetch_funding_rate_history(
+        self,
+        symbol: str,
+        *,
+        since_ms: int | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Historial de funding rates (último N pagos cada 8h).
+
+        Útil para calcular funding cumulativo: 7 días = 21 pagos. Si la suma
+        es positiva, los longs pagan a los shorts (alcista crowded).
+        """
+        return await self.client.fetch_funding_rate_history(
+            symbol, since=since_ms, limit=limit
+        )
+
+    # -------------------------------------------------------------------------
+    # REST: open interest (perpetuals).
+    # -------------------------------------------------------------------------
+
+    async def fetch_open_interest(self, symbol: str) -> dict:
+        """Open interest actual del símbolo perpetuo.
+
+        Returns CCXT-normalized dict con keys: `openInterestAmount` (en base
+        currency, e.g. BTC), `openInterestValue` (en USDT), `timestamp`.
+        """
+        return await self.client.fetch_open_interest(symbol)
+
+    async def fetch_open_interest_history(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        *,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Historial de OI por timeframe (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d).
+
+        Útil para calcular delta y tendencia: subida de OI con precio = entrada
+        de dinero nuevo (confirma trend); subida de OI con precio plano =
+        squeeze building.
+        """
+        return await self.client.fetch_open_interest_history(
+            symbol, timeframe=timeframe, limit=limit
+        )
+
+    # -------------------------------------------------------------------------
+    # REST: ticker (last/mark/index price).
+    # -------------------------------------------------------------------------
+
+    async def fetch_ticker(self, symbol: str) -> dict:
+        """Ticker snapshot. Útil para derivar OI en USDT cuando CCXT no
+        expone `openInterestValue` directamente (caso Binance USDM en el
+        endpoint `/fapi/v1/openInterest`). Multiplicar OI base × `last`.
+        """
+        return await self.client.fetch_ticker(symbol)

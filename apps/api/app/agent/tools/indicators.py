@@ -13,15 +13,12 @@ from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.agent.tools._time import floor_to_timeframe, staleness_warning
 from app.indicators import IndicatorSpec, compute_panel
+from app.indicators.panel import grouped_columns
 
-# Indicators we expose group their derived columns under a clean key in `latest`
-# so the agent doesn't have to know the column-naming convention internally.
-_GROUPED_OUTPUTS: dict[str, list[str]] = {
-    "macd": ["macd", "macd_signal", "macd_hist"],
-    "bbands": ["bb_mid", "bb_upper", "bb_lower", "bb_bw"],
-    "adx": ["adx", "plus_di", "minus_di"],
-    "vwap": ["vwap"],
-}
+# Tipos de indicador "grouped": producen >1 columna o no aceptan length de
+# manera convencional (macd, vwap). Sub-columnas se agrupan bajo `latest[name]`
+# como dict en lugar de aplanarse — así el agente las cita coherentemente.
+_GROUPED_NAMES: frozenset[str] = frozenset({"macd", "bbands", "adx", "vwap"})
 
 
 class IndicatorPanel(BaseModel):
@@ -38,10 +35,8 @@ class IndicatorPanel(BaseModel):
 
 def _column_for_spec(spec: IndicatorSpec) -> str:
     """Map an IndicatorSpec to its primary column name."""
-    if spec.name in _GROUPED_OUTPUTS:
-        return _GROUPED_OUTPUTS[spec.name][0]
-    length = spec.length or 14
-    return f"{spec.name}_{length}"
+    cols = grouped_columns(spec)
+    return cols[0]
 
 
 def _safe_float(v: Any) -> float | None:
@@ -103,12 +98,21 @@ def register_indicator_tools(agent: Agent[AgentDeps, object]) -> None:
         latest: dict[str, Any] = {}
 
         for spec in indicators:
-            cols = _GROUPED_OUTPUTS.get(spec.name)
-            if cols:
-                # Grouped: include each sub-column individually
+            cols = grouped_columns(spec)
+            if spec.name in _GROUPED_NAMES:
+                # Grouped: cada sub-columna entra individualmente en
+                # series_tail; el latest se anida bajo una key única que
+                # incluye la longitud (cuando aplica) para evitar colisiones
+                # cuando el agente pide e.g. bbands(20) y bbands(50) en una
+                # misma llamada.
+                latest_key = (
+                    spec.name
+                    if spec.length is None or spec.name in {"macd", "vwap"}
+                    else f"{spec.name}_{spec.length}"
+                )
                 for col in cols:
                     series_tail[col] = [_safe_float(v) for v in last_rows[col].to_list()]
-                latest[spec.name] = {
+                latest[latest_key] = {
                     col: _safe_float(latest_row.get(col)) for col in cols
                 }
             else:

@@ -79,6 +79,11 @@ class _OpenPosition:
     entry_ts: datetime
     entry_px: float
     stop_px: float | None
+    # Notional con que abrió la posición — compounding real: cada trade
+    # dimensiona sobre el equity vigente al momento del fill, no sobre el
+    # initial_equity. Esto hace que la curva sea geométrica/multiplicativa
+    # (la convención correcta para CAGR/Calmar/MAR) en lugar de aritmética.
+    notional: float
     bars_held: int = 0
 
 
@@ -146,14 +151,22 @@ def _simulate(
             slip = (sd or 0.0) * slippage_atr
             entry_px = opens[i] + slip
             stop_px = entry_px - sd if sd is not None and sd > 0 else None
-            equity -= initial_equity * fees_frac
-            open_pos = _OpenPosition(entry_ts=ts[i], entry_px=entry_px, stop_px=stop_px)
+            # Notional = equity vigente (compounding real). Fees sobre ese notional.
+            notional = equity
+            equity -= notional * fees_frac
+            open_pos = _OpenPosition(
+                entry_ts=ts[i], entry_px=entry_px, stop_px=stop_px, notional=notional
+            )
             pending_entry = _PendingSignal()  # consumed
 
-        # 2. Mark-to-market for the equity curve.
+        # 2. Mark-to-market for the equity curve. Usamos el notional con que
+        # abrimos la posición (compounding real): la curva refleja el equity
+        # actual = realizado + unrealized del trade abierto.
         if open_pos is not None:
-            unrealized = (closes[i] - open_pos.entry_px) / open_pos.entry_px * initial_equity
-            equity_curve.append((ts[i], initial_equity + unrealized))
+            unrealized = (
+                (closes[i] - open_pos.entry_px) / open_pos.entry_px * open_pos.notional
+            )
+            equity_curve.append((ts[i], equity + unrealized))
         else:
             equity_curve.append((ts[i], equity))
 
@@ -176,16 +189,22 @@ def _simulate(
             pending_exit = _PendingSignal()  # whether triggered or staled by stop, drop
 
             if exit_reason is not None:
-                equity -= initial_equity * fees_frac
+                # Fees y P&L sobre el notional con que abrió, no sobre
+                # initial_equity. Esto compone la curva multiplicativamente:
+                # un buy-and-hold sobre price.x2 → equity.x2.
+                equity -= open_pos.notional * fees_frac
                 ret = (fill_px - open_pos.entry_px) / open_pos.entry_px
-                pnl = initial_equity * ret
+                pnl = open_pos.notional * ret
                 equity += pnl
                 if open_pos.stop_px is not None and open_pos.stop_px < open_pos.entry_px:
                     risk_frac = (open_pos.entry_px - open_pos.stop_px) / open_pos.entry_px
-                    risk = initial_equity * risk_frac
+                    risk = open_pos.notional * risk_frac
                     r_mult = pnl / risk if risk > 0 else 0.0
                 else:
-                    r_mult = ret * 100.0  # no stop → raw return × 100 as proxy
+                    # Sin stop, R-multiple no se puede definir. Devolvemos
+                    # 0.0 como marker en lugar del proxy "ret × 100" anterior
+                    # (que contaminaba expectancy_R con valores no-R).
+                    r_mult = 0.0
 
                 trades.append(
                     Trade(
@@ -262,9 +281,28 @@ async def run_backtest(
         initial_equity=spec.initial_equity,
     )
 
+    # n_trials para DSR: # de runs PREVIOS de esta estrategia + 1 (este run).
+    # Esto deflata el Sharpe contra el trial-bias acumulado — cada run nuevo
+    # paga la "penalización" de Bonferroni-Bailey-LdP por el conjunto de
+    # configuraciones probadas hasta el momento. Sin esto, el `best_dsr`
+    # agregado se infla porque cada run individual asume n_trials=1.
+    # Auditoría 2026-05 #B6.
+    if persist:
+        n_trials_row = await session.execute(
+            text(
+                "SELECT COALESCE(n_runs, 0) FROM strategy_metrics "
+                "WHERE strategy_id = :sid"
+            ),
+            {"sid": spec.strategy_id},
+        )
+        prev_runs = n_trials_row.scalar() or 0
+        n_trials_for_dsr = prev_runs + 1
+    else:
+        n_trials_for_dsr = 1
+
     metrics = compute_metrics(
         equity_curve=equity, trades=[t.model_dump() for t in trades],
-        initial_equity=spec.initial_equity, n_trials=1,
+        initial_equity=spec.initial_equity, n_trials=n_trials_for_dsr,
         annualization_factor=annualization_factor_for(spec.timeframe),
     )
 
@@ -276,11 +314,12 @@ async def run_backtest(
                 INSERT INTO backtest_runs (
                     id, strategy_id, params, symbol, timeframe,
                     range_start, range_end, fees_bps, slippage_atr, seed,
-                    status, metrics, equity_curve, finished_at
+                    status, metrics, equity_curve, trades, finished_at
                 ) VALUES (
                     CAST(:id AS uuid), :sid, CAST(:params AS jsonb), :sym, :tf,
                     :rs, :re, :fees, :slip, :seed,
-                    'done', CAST(:metrics AS jsonb), CAST(:equity AS jsonb), now()
+                    'done', CAST(:metrics AS jsonb), CAST(:equity AS jsonb),
+                    CAST(:trades AS jsonb), now()
                 )
                 """
             ),
@@ -298,6 +337,9 @@ async def run_backtest(
                 "metrics": metrics.model_dump_json(),
                 "equity": json.dumps(
                     [(t.isoformat(), round(e, 4)) for t, e in equity]
+                ),
+                "trades": json.dumps(
+                    [t.model_dump(mode="json") for t in trades]
                 ),
             },
         )

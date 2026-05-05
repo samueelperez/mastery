@@ -16,9 +16,11 @@ from app.indicators.core import atr, ema
 
 @register(
     id="ema_cross_atr_stop",
+    name="Cruce de EMAs",
     description=(
-        "Long EMA crossover. Enter when EMA(fast) crosses above EMA(slow); "
-        "exit on the opposite cross OR when close drops below entry - k·ATR."
+        "Estrategia tendencial. Entra largo cuando la EMA rápida cruza por "
+        "encima de la lenta; sale en el cruce contrario o si el precio cae "
+        "por debajo del entry menos k×ATR (stop adaptativo a volatilidad)."
     ),
     default_params={"fast": 21, "slow": 55, "atr_length": 14, "atr_k": 2.0},
 )

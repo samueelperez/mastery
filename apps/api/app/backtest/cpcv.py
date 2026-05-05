@@ -1,10 +1,23 @@
-"""Combinatorial Purged Cross-Validation (López de Prado, AFML chapter 12).
+"""Block bootstrap del Sharpe sobre la equity curve.
 
-We use `skfolio.model_selection.CombinatorialPurgedCV` for the split logic,
-then re-run the backtest on each test fold combination and aggregate into a
-distribution of Sharpe ratios — NOT a single point. The Probability of
-Backtest Overfitting (PBO) is computed from in-sample-best vs out-of-sample
-ranks across folds.
+⚠️  IMPORTANTE — auditoría 2026-05:
+Este módulo se llama `cpcv.py` por razones históricas pero NO implementa
+CPCV (López de Prado, AFML §12.4) en el sentido estricto. CPCV honesto
+exige RE-EJECUTAR la estrategia sobre cada combinación de train/test folds
+para reconstruir N paths INDEPENDIENTES. Lo que hacemos aquí es:
+
+  1. Ejecutar el backtest UNA vez sobre todo el rango.
+  2. Trocear los retornos resultantes en folds y medir Sharpe en sub-slices.
+  3. Reportar percentiles + un `pbo` proxy (rank in-sample vs out-of-sample
+     dentro de cada par de folds, sólo 2 ranks → trivialmente ≈0.5).
+
+**Resultado**: este `pbo` NO es el PBO de López de Prado y NO debe citarse
+como tal. Por eso `compute_metrics` deja `probability_of_overfit` como `None`
+hasta que F-stat-quant implemente CPCV real con re-generación de signals
+por fold. `overfit_warning` se decide desde DSR (correcto) — no desde PBO.
+
+El `sharpe_distribution` sí es informativo: muestra cómo se comporta el
+Sharpe en distintas ventanas, lo que ayuda a detectar inestabilidad temporal.
 """
 
 from __future__ import annotations
@@ -36,7 +49,11 @@ class CPCVResult:
     sharpe_p50: float
     sharpe_p75: float
     deflated_sharpe: float
-    pbo: float
+    # `pbo` queda como `None` hasta que F-stat-quant implemente CPCV honesto
+    # con re-generación de signals por fold. Antes era un proxy que devolvía
+    # ~0.5 trivialmente y el agente lo citaba como si fuera el PBO real.
+    # Ver auditoría 2026-05 / docstring del módulo.
+    pbo: float | None
     overfit_warning: bool
 
 
@@ -63,7 +80,7 @@ async def run_cpcv(
         log.warning("cpcv.too_few_bars", n_bars=eq.size, n_folds=n_folds)
         return CPCVResult(
             n_paths=0, sharpe_distribution=[], sharpe_mean=0, sharpe_p25=0,
-            sharpe_p50=0, sharpe_p75=0, deflated_sharpe=0, pbo=0.5,
+            sharpe_p50=0, sharpe_p75=0, deflated_sharpe=0, pbo=None,
             overfit_warning=True,
         )
 
@@ -99,12 +116,16 @@ async def run_cpcv(
     if not sharpes:
         return CPCVResult(
             n_paths=0, sharpe_distribution=[], sharpe_mean=0, sharpe_p25=0,
-            sharpe_p50=0, sharpe_p75=0, deflated_sharpe=0, pbo=0.5,
+            sharpe_p50=0, sharpe_p75=0, deflated_sharpe=0, pbo=None,
             overfit_warning=True,
         )
 
     sharpe_arr = np.asarray(sharpes)
-    pbo = probability_of_overfit(in_sample_ranks=is_ranks, out_of_sample_ranks=oos_ranks)
+    # `pbo` se queda en None: el cálculo con sólo 2 ranks por fold (train vs
+    # test del mismo path) es trivialmente ~0.5 y NO es el PBO de López de
+    # Prado. La función `probability_of_overfit` quedará disponible para
+    # cuando F-stat-quant implemente CPCV real con N estrategias.
+    pbo: float | None = None
 
     # Use the median test Sharpe as the headline; deflate by n_paths trials.
     headline_sharpe = float(np.median(sharpe_arr))
@@ -127,7 +148,7 @@ async def run_cpcv(
         n_paths=len(sharpes),
         sharpe_mean=round(sharpe_arr.mean(), 4),
         dsr=full_metrics.deflated_sharpe,
-        pbo=round(pbo, 4),
+        pbo="pending_real_cpcv",
     )
     return CPCVResult(
         n_paths=len(sharpes),
@@ -137,6 +158,6 @@ async def run_cpcv(
         sharpe_p50=round(headline_sharpe, 4),
         sharpe_p75=round(float(np.percentile(sharpe_arr, 75)), 4),
         deflated_sharpe=full_metrics.deflated_sharpe,
-        pbo=round(pbo, 4),
+        pbo=pbo,
         overfit_warning=overfit,
     )

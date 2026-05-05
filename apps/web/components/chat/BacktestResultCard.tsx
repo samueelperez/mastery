@@ -5,6 +5,11 @@ import { AlertTriangleIcon, ArrowUpRightIcon, CheckIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 interface BacktestToolOutput {
@@ -59,6 +64,7 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
         <div className="grid grid-cols-3 gap-3">
           <Stat
             label="DSR"
+            tooltip="Deflated Sharpe Ratio. Sharpe ajustado por trial-bias (cuántas estrategias se probaron). Umbral pragmático: ≥0.95 = robusto, ≥0.5 = mirar."
             value={o.deflated_sharpe.toFixed(2)}
             highlight={
               o.deflated_sharpe >= 0.95
@@ -70,11 +76,13 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
           />
           <Stat
             label="max DD"
+            tooltip="Drawdown máximo histórico — caída pico-a-valle peor del periodo. >30% suele descalificar la estrategia."
             value={`${(o.max_drawdown * 100).toFixed(1)}%`}
             highlight={o.max_drawdown > 0.3 ? "bad" : "neutral"}
           />
           <Stat
             label="expectancy"
+            tooltip="Expectancy en R-multiples por trade — cuánto risco se gana de media. >0 es necesario para que la estrategia tenga edge."
             value={`${o.expectancy_R.toFixed(2)}R`}
             highlight={o.expectancy_R < 0 ? "bad" : "good"}
           />
@@ -93,18 +101,36 @@ export function BacktestResultCard({ output: o, input }: BacktestResultCardProps
 
 function Stat({
   label,
+  tooltip,
   value,
   highlight,
 }: {
   label: string
+  tooltip?: string
   value: string
   highlight?: "good" | "bad" | "neutral"
 }) {
+  const labelEl = (
+    <span
+      className={cn(
+        "font-mono text-[11px] uppercase tracking-widest text-muted-foreground",
+        tooltip && "cursor-help underline decoration-dotted underline-offset-2",
+      )}
+    >
+      {label}
+    </span>
+  )
+
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </span>
+      {tooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{labelEl}</TooltipTrigger>
+          <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+      ) : (
+        labelEl
+      )}
       <span
         className={cn(
           "font-mono text-base font-medium tabular-nums",

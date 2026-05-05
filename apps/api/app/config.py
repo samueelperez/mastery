@@ -37,9 +37,21 @@ class Settings(BaseSettings):
     # Embeddings — F2 journal retrieval (voyage-4-large @ 1024 dim).
     voyage_api_key: str | None = Field(default=None, alias="VOYAGE_API_KEY")
 
+    # Multi-symbol watchlist — F-multi. CSV de pares USDT-M de Binance que la
+    # ingesta live mantiene streamando + persistiendo. La sidebar del frontend
+    # los expone en su orden. Cualquier símbolo aquí se backfilla en arranque.
+    watch_symbols: str = Field(
+        default="BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT",
+        alias="WATCH_SYMBOLS",
+    )
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def watch_symbol_list(self) -> list[str]:
+        return [s.strip().upper() for s in self.watch_symbols.split(",") if s.strip()]
 
 
 @lru_cache(maxsize=1)

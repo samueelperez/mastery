@@ -74,6 +74,35 @@ def test_rsi_uptrend_above_50(synthetic_closes: list[float]) -> None:
     assert last is not None and last > 50.0
 
 
+def test_rsi_pure_pump_returns_100() -> None:
+    """All-up sequence: avg_loss=0, classic 100/(1+RS) divides by 0 and gives
+    inf/null. The robust formulation `100·avg_gain / (avg_gain+avg_loss)` must
+    return 100 cleanly. Regresión del bug B1 reportado en la auditoría."""
+    closes = [float(i) for i in range(50)]  # monotónico estrictamente alcista
+    df = rsi(make_lf(closes), length=14).collect()
+    last = df["rsi_14"][-1]
+    assert last is not None
+    assert math.isclose(float(last), 100.0, abs_tol=1e-9)
+
+
+def test_rsi_pure_dump_returns_0() -> None:
+    """All-down sequence: avg_gain=0 → RSI=0. Sin div-by-0."""
+    closes = [float(50 - i) for i in range(50)]
+    df = rsi(make_lf(closes), length=14).collect()
+    last = df["rsi_14"][-1]
+    assert last is not None
+    assert math.isclose(float(last), 0.0, abs_tol=1e-9)
+
+
+def test_rsi_flat_series_returns_null_post_warmup() -> None:
+    """Precio totalmente plano: avg_gain == avg_loss == 0. No hay momentum
+    medible — devolvemos null (no inventamos un valor neutral 50)."""
+    closes = [100.0] * 50
+    df = rsi(make_lf(closes), length=14).collect()
+    last = df["rsi_14"][-1]
+    assert last is None
+
+
 @pytest.mark.parametrize("length", [7, 14])
 def test_atr_matches_pure_python(synthetic_ohlc: dict[str, list[float]], length: int) -> None:
     df = atr(
