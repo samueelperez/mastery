@@ -100,8 +100,22 @@ async def resolve_user_id(
     """Lee token desde header Authorization o cookie, devuelve userId o None."""
     token = resolve_token_from_request(request)
     if token is None:
+        log.info(
+            "auth.no_token",
+            path=request.url.path,
+            has_auth_header=bool(request.headers.get("authorization")),
+            has_cookie=bool(request.cookies.get(SESSION_COOKIE_NAME)),
+        )
         return None
-    return await lookup_user_id_for_token(token, session)
+    user_id = await lookup_user_id_for_token(token, session)
+    if user_id is None:
+        log.info(
+            "auth.token_not_found",
+            path=request.url.path,
+            token_prefix=token[:8],
+            token_len=len(token),
+        )
+    return user_id
 
 
 async def require_user_id(
