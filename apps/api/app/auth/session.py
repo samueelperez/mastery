@@ -44,15 +44,24 @@ def extract_session_token(cookie_value: str | None) -> str | None:
 
 
 def extract_bearer_token(authorization: str | None) -> str | None:
-    """Read `Authorization: Bearer <token>` (plugin bearer de BetterAuth).
-    Devuelve el token raw — sin sufijo HMAC, ya viene limpio del plugin."""
+    """Read `Authorization: Bearer <token>.<hmac>` (plugin bearer de BetterAuth).
+
+    BetterAuth firma el token con HMAC y lo incluye en el header igual que
+    en la cookie (formato `<token>.<hmac>`). La columna `session.token` solo
+    almacena el token raw, así que recortamos el sufijo antes del lookup.
+    Si el valor no trae punto (transitional), lo devolvemos entero."""
     if not authorization:
         return None
     parts = authorization.split(" ", 1)
     if len(parts) != 2 or parts[0].lower() != "bearer":
         return None
-    token = parts[1].strip()
-    return token or None
+    raw = parts[1].strip()
+    if not raw:
+        return None
+    if "." in raw:
+        token, _ = raw.rsplit(".", 1)
+        return token or None
+    return raw
 
 
 def resolve_token_from_request(request: Request) -> str | None:

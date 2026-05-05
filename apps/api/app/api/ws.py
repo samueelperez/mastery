@@ -37,11 +37,14 @@ async def _ws_user_id(websocket: WebSocket) -> str | None:
     """Resolve the BetterAuth session on a WebSocket. Browsers no aceptan
     Authorization header en WS, así que el cliente pasa el token via query
     param `?token=…` cuando estamos en cross-domain (Vercel ↔ Railway).
-    Si no hay query param, fallback a la cookie (dev local same-origin)."""
+    Si no hay query param, fallback a la cookie (dev local same-origin).
+
+    En ambos transports el token llega con sufijo HMAC (`<token>.<hmac>`);
+    `extract_session_token` recorta el sufijo igual que para la cookie."""
     token: str | None = None
     raw_query_token = websocket.query_params.get("token")
     if raw_query_token:
-        token = raw_query_token.strip() or None
+        token = extract_session_token(raw_query_token)
     if token is None:
         token = extract_session_token(websocket.cookies.get(SESSION_COOKIE_NAME))
     if token is None:
