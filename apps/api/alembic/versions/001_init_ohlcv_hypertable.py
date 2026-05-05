@@ -8,6 +8,7 @@ Create Date: 2026-05-03
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "001"
 down_revision: str | None = None
@@ -16,9 +17,27 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 1. Required extensions (pgvector is here so F2 doesn't need a separate migration)
-    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
+    # 1. pgvector es OBLIGATORIO (F2 embeddings).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+    # TimescaleDB es OPCIONAL: si el provider no lo tiene (Railway, Neon
+    # free, RDS sin extension) saltamos las funciones específicas. Sin
+    # Timescale el ohlcv queda como tabla regular — funciona igual, solo
+    # más lento y sin compresión columnar a partir de ~5M filas.
+    # Local dev con docker-compose sí tiene Timescale; prod en Railway no.
+    #
+    # IMPORTANTE: chequeamos pg_available_extensions ANTES de CREATE
+    # porque un CREATE EXTENSION fallido contamina la transacción de
+    # Alembic ("current transaction is aborted, commands ignored").
+    bind = op.get_bind()
+    timescale_ok = bind.execute(
+        text(
+            "SELECT 1 FROM pg_available_extensions "
+            "WHERE name = 'timescaledb' LIMIT 1"
+        )
+    ).first() is not None
+    if timescale_ok:
+        op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
 
     # 2. OHLCV table — multi-symbol, multi-timeframe, multi-exchange from day one.
     #    Composite PK lets us idempotently upsert via ON CONFLICT DO NOTHING.
@@ -39,13 +58,8 @@ def upgrade() -> None:
         """
     )
 
-    # 3. Convert to hypertable. 7-day chunk fits ~10K BTCUSDT 1m rows comfortably.
-    op.execute(
-        "SELECT create_hypertable('ohlcv', 'ts', chunk_time_interval => INTERVAL '7 days')"
-    )
-
     # 4. Index on (symbol, timeframe, ts DESC) — primary query shape:
-    #    "give me last N candles for BTCUSDT 1h".
+    #    "give me last N candles for BTCUSDT 1h". SIEMPRE útil.
     op.execute(
         """
         CREATE INDEX ohlcv_symbol_tf_ts_desc
@@ -53,19 +67,21 @@ def upgrade() -> None:
         """
     )
 
-    # 5. Enable columnar compression. Tier-1 ordering by ts so most queries hit
-    #    a single compressed segment.
-    op.execute(
-        """
-        ALTER TABLE ohlcv SET (
-            timescaledb.compress = true,
-            timescaledb.compress_segmentby = 'exchange,symbol,timeframe',
-            timescaledb.compress_orderby   = 'ts DESC'
+    # 3-5. Funciones específicas de Timescale solo si está disponible.
+    if timescale_ok:
+        op.execute(
+            "SELECT create_hypertable('ohlcv', 'ts', chunk_time_interval => INTERVAL '7 days')"
         )
-        """
-    )
-    # Compress chunks older than 7 days (most queries hit recent data uncompressed).
-    op.execute("SELECT add_compression_policy('ohlcv', INTERVAL '7 days')")
+        op.execute(
+            """
+            ALTER TABLE ohlcv SET (
+                timescaledb.compress = true,
+                timescaledb.compress_segmentby = 'exchange,symbol,timeframe',
+                timescaledb.compress_orderby   = 'ts DESC'
+            )
+            """
+        )
+        op.execute("SELECT add_compression_policy('ohlcv', INTERVAL '7 days')")
 
 
 def downgrade() -> None:
