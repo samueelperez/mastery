@@ -35,8 +35,16 @@ async def chat(
         user_id=user_id,
     )
     log.info("chat.request.start", user_id=user_id)
-    return await VercelAIAdapter.dispatch_request(
+    response = await VercelAIAdapter.dispatch_request(
         request,
         agent=get_agent(),
         deps=deps,
     )
+    # Anti-buffering en proxies/edges (Railway-edge incluido). Sin esto algunos
+    # proxies acumulan los chunks SSE hasta superar un buffer interno antes de
+    # entregarlos, lo que se manifiesta como ERR_CONNECTION_RESET en el browser
+    # cuando el agent tarda en emitir tokens (tool calls largas).
+    response.headers["Cache-Control"] = "no-cache, no-transform"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    return response
