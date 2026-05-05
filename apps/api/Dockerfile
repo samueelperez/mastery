@@ -7,13 +7,16 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Layer cache: deps primero. uv sync --frozen instala exactamente lo que
-# está en uv.lock, nada más nada menos. --no-dev evita pytest/ruff en prod.
+# --- Stage 1: deps locked (alta cache hit ratio) ---
+# `--no-install-project` evita que hatchling intente construir el propio
+# proyecto en esta capa (necesitaría README.md y src/, que aún no están).
+# Solo se instalan las dependencias del lockfile.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Source code después (cambia con cada commit, no invalida la layer de deps).
+# --- Stage 2: source code + install del proyecto ---
 COPY . .
+RUN uv sync --frozen --no-dev
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
