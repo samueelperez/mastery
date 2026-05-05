@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { authClient } from "@/lib/auth/auth-client"
+import { authClient, clearBearerToken } from "@/lib/auth/auth-client"
 import { cn } from "@/lib/utils"
 
 function initials(input: string | null | undefined): string {
@@ -59,6 +59,7 @@ export function UserMenu() {
 
   async function handleSignOut() {
     await authClient.signOut()
+    clearBearerToken()
     queryClient.clear()
     window.location.assign("/auth/login")
   }

@@ -18,10 +18,13 @@ import contextlib
 import orjson
 import structlog
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
-from sqlalchemy import text
 
 from app.alerts.runtime import alerts_channel
-from app.auth.session import SESSION_COOKIE_NAME, extract_session_token
+from app.auth.session import (
+    SESSION_COOKIE_NAME,
+    extract_session_token,
+    lookup_user_id_for_token,
+)
 from app.broadcasting.pubsub import market_channel, subscribe
 from app.data.binance_adapter import EXCHANGE_NAME
 from app.db import session_scope
@@ -31,24 +34,20 @@ router = APIRouter()
 
 
 async def _ws_user_id(websocket: WebSocket) -> str | None:
-    """Resolve the BetterAuth session cookie on a WebSocket. Same lookup as
-    the HTTP `resolve_user_id`, but reads from `websocket.cookies` and opens
-    its own short-lived session (FastAPI `Depends(session_dependency)` on a
-    websocket handler is awkward; this is simpler)."""
-    token = extract_session_token(websocket.cookies.get(SESSION_COOKIE_NAME))
+    """Resolve the BetterAuth session on a WebSocket. Browsers no aceptan
+    Authorization header en WS, así que el cliente pasa el token via query
+    param `?token=…` cuando estamos en cross-domain (Vercel ↔ Railway).
+    Si no hay query param, fallback a la cookie (dev local same-origin)."""
+    token: str | None = None
+    raw_query_token = websocket.query_params.get("token")
+    if raw_query_token:
+        token = raw_query_token.strip() or None
+    if token is None:
+        token = extract_session_token(websocket.cookies.get(SESSION_COOKIE_NAME))
     if token is None:
         return None
     async with session_scope() as session:
-        row = (
-            await session.execute(
-                text(
-                    'SELECT "userId" FROM session '
-                    'WHERE token = :tok AND "expiresAt" > now() LIMIT 1'
-                ),
-                {"tok": token},
-            )
-        ).mappings().one_or_none()
-    return str(row["userId"]) if row else None
+        return await lookup_user_id_for_token(token, session)
 
 
 @router.websocket("/ws/market")

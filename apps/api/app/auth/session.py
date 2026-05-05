@@ -1,15 +1,17 @@
-"""Resolve a BetterAuth session cookie to a user_id.
+"""Resolve a BetterAuth session to a user_id.
 
-Cookie format: `better-auth.session_token=<token>.<hmac>` (URL-encoded). The
-`<token>` is the `session.token` column in Postgres. We don't reverify the HMAC
-in Python — the DB row check (`expiresAt > now()`) is what gates validity.
-The HMAC exists primarily so a tampered cookie fails before reaching the DB,
-which is a defense-in-depth concern we can revisit if F4 ships to production.
+Two formas de transportar el token desde el browser:
 
-Two FastAPI dependencies:
-- `require_user_id`: returns the user_id or raises 401.
-- `optional_user_id`: returns user_id or None — used by /health and /ws/market
-  where data is non-sensitive.
+1. Cookie `better-auth.session_token=<token>.<hmac>` (URL-encoded) —
+   funciona cuando frontend y API comparten dominio (dev local same-origin
+   o custom domain `*.midominio.com`).
+2. Header `Authorization: Bearer <token>` — emitido por el plugin
+   `bearer()` de BetterAuth y persistido en localStorage por el cliente.
+   Necesario en deploys cross-domain (Vercel ↔ Railway) donde el browser
+   no envía cookies entre dominios distintos.
+
+`<token>` en ambos casos es el `session.token` de Postgres. No reverificamos
+HMAC en Python — el row check (`expiresAt > now()`) es el gate de validez.
 """
 
 from __future__ import annotations
@@ -41,14 +43,29 @@ def extract_session_token(cookie_value: str | None) -> str | None:
     return decoded
 
 
-async def resolve_user_id(
-    request: Request,
-    session: AsyncSession,
-) -> str | None:
-    """Look up the cookie's session row; return userId if active else None."""
-    token = extract_session_token(request.cookies.get(SESSION_COOKIE_NAME))
-    if token is None:
+def extract_bearer_token(authorization: str | None) -> str | None:
+    """Read `Authorization: Bearer <token>` (plugin bearer de BetterAuth).
+    Devuelve el token raw — sin sufijo HMAC, ya viene limpio del plugin."""
+    if not authorization:
         return None
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    token = parts[1].strip()
+    return token or None
+
+
+def resolve_token_from_request(request: Request) -> str | None:
+    """Prefiere el header Authorization (cross-domain) sobre la cookie."""
+    bearer = extract_bearer_token(request.headers.get("authorization"))
+    if bearer:
+        return bearer
+    return extract_session_token(request.cookies.get(SESSION_COOKIE_NAME))
+
+
+async def lookup_user_id_for_token(
+    token: str, session: AsyncSession
+) -> str | None:
     row = (
         await session.execute(
             text(
@@ -67,6 +84,17 @@ async def resolve_user_id(
     return str(row["userId"])
 
 
+async def resolve_user_id(
+    request: Request,
+    session: AsyncSession,
+) -> str | None:
+    """Lee token desde header Authorization o cookie, devuelve userId o None."""
+    token = resolve_token_from_request(request)
+    if token is None:
+        return None
+    return await lookup_user_id_for_token(token, session)
+
+
 async def require_user_id(
     request: Request,
     session: Annotated[AsyncSession, Depends(session_dependency)],
@@ -77,7 +105,7 @@ async def require_user_id(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
-            headers={"WWW-Authenticate": "Cookie"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return user_id
 

@@ -1,29 +1,42 @@
+import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
 import { env } from "@/lib/env"
 
-/** All API calls cross-origin (Next on :3001, FastAPI on :8000) so the
- * BetterAuth session cookie only rides along when `credentials: 'include'`
- * is set. Wrap fetch once instead of repeating it 12 times.
+function readBearerToken(): string | null {
+  if (typeof window === "undefined") return null
+  return window.localStorage.getItem(BEARER_TOKEN_KEY)
+}
+
+/** All API calls cross-origin (Next en Vercel, FastAPI en Railway) — cookies
+ * cross-domain no funcionan sin custom domain compartido. Adjuntamos el
+ * token BetterAuth (capturado en login via plugin bearer y persistido en
+ * localStorage) como `Authorization: Bearer <token>`. `credentials:include`
+ * sigue activo para entornos same-origin (dev local).
  *
- * Bonus: a stale cookie (session row deleted server-side) lets the Next
- * middleware through but trips a 401 here. Auto-redirect to /auth/login so
- * the user doesn't get stuck with a "401" toast on every refetch — the
- * login page clears the stale cookie via authClient.signIn / signOut. */
+ * Bonus: si el token es inválido (expiró server-side, etc.) FastAPI
+ * devuelve 401 → redirect a /auth/login para que el user reentre y el
+ * client persista uno fresco. */
 function apiFetch(
   input: RequestInfo | URL,
   init: RequestInit = {},
 ): Promise<Response> {
-  return fetch(input, { credentials: "include", ...init }).then((res) => {
-    if (res.status === 401 && typeof window !== "undefined") {
-      const here = window.location.pathname + window.location.search
-      // Avoid redirect loops if we're already on /auth/*
-      if (!here.startsWith("/auth")) {
-        window.location.assign(
-          `/auth/login?redirect=${encodeURIComponent(here)}`,
-        )
+  const token = readBearerToken()
+  const headers = new Headers(init.headers)
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+  return fetch(input, { credentials: "include", ...init, headers }).then(
+    (res) => {
+      if (res.status === 401 && typeof window !== "undefined") {
+        const here = window.location.pathname + window.location.search
+        if (!here.startsWith("/auth")) {
+          window.location.assign(
+            `/auth/login?redirect=${encodeURIComponent(here)}`,
+          )
+        }
       }
-    }
-    return res
-  })
+      return res
+    },
+  )
 }
 
 export interface CandleDTO {

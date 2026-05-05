@@ -3,7 +3,23 @@
 // import the lower-level `ReconnectingWebSocket` from `partysocket/ws`.
 import ReconnectingWebSocket from "partysocket/ws"
 
+import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
 import { env } from "@/lib/env"
+
+/** Browsers no permiten Authorization header en WebSocket. Pasamos el
+ * BetterAuth bearer token (capturado en login y persistido en localStorage)
+ * via query string `?token=…`. El backend lo lee igual que la cookie. */
+function readBearerToken(): string | null {
+  if (typeof window === "undefined") return null
+  return window.localStorage.getItem(BEARER_TOKEN_KEY)
+}
+
+function appendAuthToken(url: string): string {
+  const token = readBearerToken()
+  if (!token) return url
+  const sep = url.includes("?") ? "&" : "?"
+  return `${url}${sep}token=${encodeURIComponent(token)}`
+}
 
 /** Backend message envelope from /ws/market. */
 export type MarketWsMessage =
@@ -30,7 +46,7 @@ export function connectMarketWs(
 ): ReconnectingWebSocket {
   const url = `${env.wsUrl}/ws/market?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(timeframe)}`
   // Defaults: max 30 retry attempts, exponential backoff up to ~30s, message buffering.
-  return new ReconnectingWebSocket(url)
+  return new ReconnectingWebSocket(appendAuthToken(url))
 }
 
 /** Backend envelope from /ws/alerts. `data` matches alert_events row + rule context. */
@@ -51,5 +67,5 @@ export interface AlertEventPayload {
 
 export function connectAlertsWs(userId = "me"): ReconnectingWebSocket {
   const url = `${env.wsUrl}/ws/alerts?user_id=${encodeURIComponent(userId)}`
-  return new ReconnectingWebSocket(url)
+  return new ReconnectingWebSocket(appendAuthToken(url))
 }

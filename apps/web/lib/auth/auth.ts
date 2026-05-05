@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth"
+import { bearer } from "better-auth/plugins"
 import { Pool } from "pg"
 
 /**
@@ -47,6 +48,11 @@ export const auth = betterAuth({
         },
       }
     : undefined,
-  // Cookies are scoped to the same origin Next.js runs on; FastAPI reads them
-  // via the `better-auth.session_token` cookie (or the configured cookie name).
+  // Bearer plugin: emite `set-auth-token` en signIn responses para que el
+  // browser pueda guardar el session token en localStorage y mandarlo como
+  // `Authorization: Bearer <token>` al backend FastAPI desplegado en otro
+  // dominio (cross-domain cookies entre Vercel y Railway no son posibles
+  // sin custom domain compartido). FastAPI valida el token contra la tabla
+  // `session` igual que la cookie tradicional.
+  plugins: [bearer()],
 })
