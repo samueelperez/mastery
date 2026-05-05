@@ -1,0 +1,33 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.venv/
+venv/
+.uv-cache/
+*.egg-info/
+build/
+dist/
+
+# Testing / linting
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Env files (Railway inyecta env vars)
+.env
+.env.*
+!.env.example
+
+# Local-only
+*.log
+*.sqlite
+.tmp/
