@@ -26,17 +26,30 @@ const kindCls: Record<KeyLevel["kind"], string> = {
   reference: "border-border text-muted-foreground",
 }
 
-function formatPrice(price: number): string {
+function formatPrice(price: number | null | undefined): string {
+  // Defensa: el agente puede emitir niveles sin `price` aunque el schema
+  // Pydantic lo declara como float. Mostramos "—" en lugar de crashear.
+  if (typeof price !== "number" || !Number.isFinite(price)) return "—"
   if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 1 })
   if (price >= 1) return price.toLocaleString(undefined, { maximumFractionDigits: 3 })
   return price.toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
 
 export function KeyLevelsStrip({ levels, className }: KeyLevelsStripProps) {
-  if (levels.length === 0) return null
+  // Filtrar niveles malformados antes de renderizar. Si el agente emitió
+  // un key_level sin `price` o con NaN, lo descartamos en lugar de
+  // mostrar "—" que confunde al user.
+  const valid = levels.filter(
+    (lvl) =>
+      typeof lvl.price === "number" &&
+      Number.isFinite(lvl.price) &&
+      typeof lvl.label === "string" &&
+      lvl.label.length > 0,
+  )
+  if (valid.length === 0) return null
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      {levels.map((lvl, i) => (
+      {valid.map((lvl, i) => (
         <Badge
           key={`${lvl.kind}-${lvl.price}-${i}`}
           variant="outline"
