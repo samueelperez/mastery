@@ -22,7 +22,8 @@ const mono = JetBrains_Mono({
 
 export const metadata = {
   title: "Mastery Trader",
-  description: "Copilot de trading cripto — intérprete y orquestador, nunca un oráculo.",
+  description:
+    "Copiloto de trading cripto que analiza el mercado contigo, valida estrategias con datos y te avisa en tiempo real.",
 }
 
 export default function RootLayout({

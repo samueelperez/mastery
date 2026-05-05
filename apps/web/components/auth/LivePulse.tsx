@@ -81,23 +81,21 @@ export function LivePulse() {
     <div className="flex flex-col gap-2" role="status" aria-live="polite">
       <LiveRow
         icon={<ActivityIcon className="size-3" />}
-        label="BTCUSDT · 1h · spot"
+        label="Precio en vivo · BTC"
         value={priceText}
         hint={ts ? formatTimeAgo(ts) : undefined}
         status={isLoading ? "loading" : isError ? "ok" : "live"}
       />
       <LiveRow
         icon={<FlaskConicalIcon className="size-3" />}
-        label="backtests reproducibles"
-        value="DSR + walk-forward + CPCV"
-        hint="14 herramientas"
+        label="Estrategias validadas"
+        value="Probamos con datos antes de operar"
         status="ok"
       />
       <LiveRow
         icon={<BellRingIcon className="size-3" />}
-        label="alertas — disparo a cierre de vela"
-        value="cooldown · regla determinista"
-        hint="WS push"
+        label="Alertas inteligentes"
+        value="Te avisamos cuando algo importante pasa"
         status="ok"
       />
     </div>

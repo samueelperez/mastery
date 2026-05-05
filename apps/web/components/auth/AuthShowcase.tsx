@@ -92,43 +92,35 @@ export function AuthShowcase({ className }: { className?: string }) {
       </h1>
 
       <p className="relative z-10 max-w-md font-sans text-[14px] leading-relaxed text-[var(--fg-1)]">
-        Cada cifra cita la herramienta determinista que la produjo. DSR +
-        walk-forward + CPCV antes de paper. Diario con embeddings. Alertas que
-        disparan a cierre de vela.
+        Analiza el mercado contigo en tiempo real, valida cada estrategia
+        con datos históricos antes de proponerte una operación, y te avisa
+        cuando algo importante pasa.
       </p>
 
       <div className="relative z-10">
         <LivePulse />
       </div>
 
-      {/* Terminal box decorativa — mock CLI */}
+      {/* Terminal box decorativa — mock CLI con copy amigable */}
       <pre
         aria-hidden
         className="relative z-10 m-0 overflow-hidden rounded-md border border-border/50 bg-[var(--bg-inset)]/80 px-4 py-3 font-mono text-[11px] leading-relaxed text-[var(--fg-2)]"
       >
-        <span className="text-[var(--violet)]">$</span> connect binance.usdt-m
+        <span className="text-[var(--violet)]">$</span> conectando con
+        binance…
         {"\n"}
-        <span className="text-[var(--long)]">›</span> handshake ok ·{" "}
-        <span className="tabular-nums">latency 42ms</span>
+        <span className="text-[var(--long)]">›</span> conectado ·{" "}
+        <span className="tabular-nums">42ms</span>
         {"\n"}
-        <span className="text-[var(--violet)]">$</span> copilot.boot --mode
-        interpreter
+        <span className="text-[var(--violet)]">$</span> arrancando copiloto
         {"\n"}
-        <span className="text-[var(--long)]">›</span> ready · awaiting auth
+        <span className="text-[var(--long)]">›</span> listo · esperando
+        login
         <span
           className="ml-0.5 inline-block h-3 w-1.5 -translate-y-0.5 bg-[var(--fg-2)] [animation:cursor-blink_1s_steps(2)_infinite] motion-reduce:animate-none"
           aria-hidden
         />
       </pre>
-
-      <footer className="relative z-10 mt-auto flex flex-col gap-1 border-t border-border/40 pt-5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--fg-3)]">
-          intérprete y orquestador
-        </span>
-        <span className="font-mono text-[12px] tracking-tight text-[var(--amber)]">
-          nunca un oráculo
-        </span>
-      </footer>
     </aside>
   )
 }
