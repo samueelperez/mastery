@@ -7,6 +7,7 @@ import {
 } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { Card } from "@/components/ui/card"
+import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
 import { env } from "@/lib/env"
 import { isBriefAnalysis, isTradeIdea } from "@/lib/chat-types"
 import { useChat } from "@ai-sdk/react"
@@ -99,9 +100,21 @@ export function CopilotChat({ className }: CopilotChatProps) {
   const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport: new DefaultChatTransport({
       api: `${env.apiUrl}/chat`,
-      // BetterAuth session cookie: el chat es cross-origin (web :3001 → api :8000)
-      // y `useChat` no usa nuestro `apiFetch` wrapper. Sin esto → 401.
+      // El chat es cross-origin (Vercel → Railway) y `useChat` no usa nuestro
+      // `apiFetch` wrapper. En cross-domain las cookies no viajan, así que
+      // pasamos el bearer token (capturado en login y persistido en localStorage)
+      // como Authorization header. `credentials:"include"` se mantiene para
+      // entornos same-origin (dev local).
       credentials: "include",
+      headers: () => {
+        const token =
+          typeof window === "undefined"
+            ? null
+            : window.localStorage.getItem(BEARER_TOKEN_KEY)
+        const h: Record<string, string> = {}
+        if (token) h.Authorization = `Bearer ${token}`
+        return h
+      },
     }),
   })
   const { warning: bridgeWarning, dismissWarning } = useSymbolBridge(messages)
