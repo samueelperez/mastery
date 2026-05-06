@@ -90,11 +90,17 @@ export interface TradeIdea {
 export function isTradeIdea(input: unknown): input is TradeIdea {
   if (!input || typeof input !== "object") return false
   const v = input as Record<string, unknown>
+  // `confidence` se añadió al guard tras un crash en producción: durante
+  // streaming, los campos llegan progresivamente y el input parcial pasaba el
+  // guard antes de tener confidence, haciendo crashear `.toUpperCase()` en la
+  // card. Validar el conjunto completo (campos críticos + confidence) evita
+  // renderizar TradeIdeaCard con datos a medio camino.
   return (
     typeof v.symbol === "string" &&
     typeof v.timeframe === "string" &&
     typeof v.direction === "string" &&
     typeof v.summary_es === "string" &&
+    typeof v.confidence === "string" &&
     Array.isArray(v.confluences) &&
     Array.isArray(v.targets)
   )
@@ -124,12 +130,15 @@ export function isBriefAnalysis(input: unknown): input is BriefAnalysis {
   if (!input || typeof input !== "object") return false
   const v = input as Record<string, unknown>
   // Discriminante clave vs TradeIdea: verdict_es exclusivo de BriefAnalysis.
+  // `confidence` también es required para evitar render parcial durante
+  // streaming (mismo motivo que isTradeIdea).
   return (
     typeof v.symbol === "string" &&
     typeof v.timeframe === "string" &&
     typeof v.verdict_es === "string" &&
     typeof v.catalyst_es === "string" &&
     typeof v.risk_es === "string" &&
+    typeof v.confidence === "string" &&
     Array.isArray(v.key_levels)
   )
 }

@@ -251,9 +251,12 @@ export function TradeIdeaCard({ idea }: TradeIdeaCardProps) {
               )}
             <Badge
               variant="outline"
-              className={cn("font-mono text-[11px]", confidenceTone[idea.confidence])}
+              className={cn(
+                "font-mono text-[11px]",
+                idea.confidence ? confidenceTone[idea.confidence] : undefined,
+              )}
             >
-              {idea.confidence.toUpperCase()}
+              {(idea.confidence ?? "—").toUpperCase()}
             </Badge>
           </div>
         </div>
