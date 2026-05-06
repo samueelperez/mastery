@@ -42,6 +42,17 @@ from app.storage.setup_repo import insert_setup_from_idea
 # funciones, solo conceptos.
 _TOOL_LEAK_PATTERN = re.compile(r"\bget_[a-z_]+\b")
 
+# Verdict que propone esperar / no entrar / vigilar. Cuando un BriefAnalysis
+# emite confidence='high' con un verdict de pausa, hay incoherencia: la
+# confianza alta debe respaldar acción inmediata, no el "espera". Soft-degrade
+# a medium en lugar de rebotar (ModelRetry) porque es un ajuste fino — el
+# análisis sigue siendo válido, solo recalibramos la etiqueta.
+_VERDICT_PAUSE_PATTERN = re.compile(
+    r"\b(?:espera(?:r|ndo)?|aún no|no entres|pullback necesario|"
+    r"vigilar|esperar a|no compres|no vendas)\b",
+    re.IGNORECASE,
+)
+
 # Sentence terminator followed by whitespace or end-of-string. Evita contar
 # decimales (78.0, +2.1) y miles con punto (82.850). Solo cuenta puntos que
 # realmente cierran una frase.
@@ -176,6 +187,70 @@ def _extract_aggregate_bias(
                 if isinstance(bias, str):
                     return bias
     return None
+
+
+def _collect_lvn_zones(
+    messages: list[ModelRequest | ModelResponse],
+) -> list[tuple[float, float, float]]:
+    """Lee los `low_volume_nodes` del último output de `get_volume_profile`
+    y devuelve `[(low_bound, high_bound, center_price), ...]` aproximando el
+    bin width como `(range_high - range_low) / bins`. Lista vacía si la tool
+    no se llamó o si el shape del output no contiene los campos.
+
+    Lo usa el gate "ningún target/support cae dentro de un LVN": los LVN son
+    zonas de aceleración (vacuum), no soportes/objetivos realistas. Soft-warn
+    inicial: solo log + degrade confidence si algún key_level cae en LVN; en
+    una segunda iteración (tras observar logs) se promueve a ModelRetry.
+    """
+    zones: list[tuple[float, float, float]] = []
+    # Solo el último output cuenta — si la tool se llamó múltiples veces este
+    # turn, asumimos que el último es el más relevante para los niveles que
+    # el modelo propone ahora.
+    latest_payload: dict[str, object] | None = None
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if not isinstance(part, ToolReturnPart):
+                continue
+            if part.tool_name != "get_volume_profile":
+                continue
+            try:
+                payload = part.model_response_object()
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                latest_payload = payload  # type: ignore[assignment]
+    if latest_payload is None:
+        return zones
+    data = latest_payload.get("data")
+    if not isinstance(data, dict):
+        return zones
+    range_low = data.get("range_low")
+    range_high = data.get("range_high")
+    bins = data.get("bins")
+    lvns = data.get("low_volume_nodes")
+    if not (
+        isinstance(range_low, (int, float))
+        and isinstance(range_high, (int, float))
+        and isinstance(bins, int)
+        and bins > 0
+        and isinstance(lvns, list)
+    ):
+        return zones
+    bin_width = (float(range_high) - float(range_low)) / bins
+    if bin_width <= 0:
+        return zones
+    half = bin_width / 2.0
+    for node in lvns:
+        if not isinstance(node, dict):
+            continue
+        price = node.get("price")
+        if not isinstance(price, (int, float)):
+            continue
+        center = float(price)
+        zones.append((center - half, center + half, center))
+    return zones
 
 
 def _collect_high_severity_biases(
@@ -317,6 +392,53 @@ def register_validators(
             stale_warnings = _collect_stale_tool_warnings(list(ctx.messages))
             if stale_warnings and output.confidence != "low":
                 output.confidence = "low"
+
+            # Validator A — confidence-vs-verdict alignment (soft-degrade).
+            # Si verdict_es propone esperar pero confidence='high', es
+            # incoherencia: la confianza alta debe respaldar acción inmediata.
+            # Bajamos a 'medium' silenciosamente y logueamos para auditar.
+            # No usamos ModelRetry porque el análisis es válido, solo la
+            # etiqueta estaba miscalibrada — recalibrarla evita retry caros.
+            if (
+                output.confidence == "high"
+                and _VERDICT_PAUSE_PATTERN.search(output.verdict_es)
+            ):
+                ctx.deps.log.info(
+                    "validator.confidence_pause_mismatch",
+                    verdict=output.verdict_es[:80],
+                    original_confidence="high",
+                    new_confidence="medium",
+                )
+                output.confidence = "medium"
+
+            # Validator B — LVN check sobre key_levels (FASE 1: soft-warn).
+            # Si algún key_level con kind ∈ {target, support, resistance} cae
+            # dentro del rango de un LVN (zona de aceleración / vacuum),
+            # logueamos el caso y degradamos confidence si era 'high'.
+            # Los LVN no son soporte ni objetivo realista — el precio acelera
+            # al cruzarlos. En una segunda iteración (tras 1-2 semanas
+            # revisando logs) promovemos a ModelRetry.
+            lvn_zones = _collect_lvn_zones(list(ctx.messages))
+            if lvn_zones:
+                offending: list[tuple[str, float, float]] = []
+                for kl in output.key_levels:
+                    if kl.kind not in ("target", "support", "resistance"):
+                        continue
+                    for low, high, center in lvn_zones:
+                        if low <= kl.price <= high:
+                            offending.append((kl.label, kl.price, center))
+                            break
+                if offending:
+                    ctx.deps.log.info(
+                        "validator.level_in_lvn",
+                        offending=[
+                            {"label": lbl, "price": p, "lvn_center": c}
+                            for lbl, p, c in offending
+                        ],
+                        n_offending=len(offending),
+                    )
+                    if output.confidence == "high":
+                        output.confidence = "medium"
 
             high_biases = _collect_high_severity_biases(list(ctx.messages))
             if high_biases:
@@ -571,6 +693,48 @@ def register_validators(
                     f"o cambia direction='no_trade'. NO propongas trades con "
                     f"esperanza negativa."
                 )
+
+        # Validator B — LVN check sobre targets (FASE 1: soft-warn).
+        # Mismo principio que en BriefAnalysis pero sobre TradeIdea.targets.
+        # Un TP dentro de un LVN es objetivo poco realista: el precio acelera
+        # al cruzar la zona, no se queda. Soft-warn ahora, hard-reject tras
+        # observar logs.
+        lvn_zones = _collect_lvn_zones(list(ctx.messages))
+        if lvn_zones and output.direction in ("long", "short"):
+            offending: list[tuple[str, float, float]] = []
+            for tgt in output.targets:
+                for low, high, center in lvn_zones:
+                    if low <= tgt.price <= high:
+                        offending.append((tgt.label, tgt.price, center))
+                        break
+            if offending:
+                ctx.deps.log.info(
+                    "validator.target_in_lvn",
+                    direction=output.direction,
+                    offending=[
+                        {"label": lbl, "price": p, "lvn_center": c}
+                        for lbl, p, c in offending
+                    ],
+                    n_offending=len(offending),
+                )
+                if output.confidence == "high":
+                    output.confidence = "medium"
+
+        # Validator A — confidence-vs-summary alignment (soft-degrade).
+        # En TradeIdea el "verdict" vive en summary_es (más largo). Si el
+        # modelo emite confidence='high' pero el summary recomienda esperar
+        # un trigger antes de operar, recalibramos a 'medium'.
+        if (
+            output.confidence == "high"
+            and _VERDICT_PAUSE_PATTERN.search(output.summary_es)
+        ):
+            ctx.deps.log.info(
+                "validator.confidence_pause_mismatch",
+                summary=output.summary_es[:120],
+                original_confidence="high",
+                new_confidence="medium",
+            )
+            output.confidence = "medium"
 
         ctx.deps.log.info(
             "agent.output_validated",
