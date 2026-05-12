@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import session_dependency
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME
-from app.storage.ohlcv_repo import fetch_range
+from app.market.ohlcv.repo import fetch_range
 
 router = APIRouter()
 

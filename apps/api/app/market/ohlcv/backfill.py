@@ -23,7 +23,7 @@ from app.core.db import dispose_engine, init_engine, session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.core.exchanges.exchange_context import ExchangeContext
 from app.core.exchanges.normalizer import timeframe_delta
-from app.storage.ohlcv_repo import bulk_upsert, count_rows
+from app.market.ohlcv.repo import bulk_upsert, count_rows
 
 log = structlog.get_logger(__name__)
 

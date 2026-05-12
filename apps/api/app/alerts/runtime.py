@@ -38,7 +38,7 @@ from app.core.broadcasting.pubsub import market_channel, publish_json, subscribe
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME
-from app.ingestion.live_klines import get_watch_list
+from app.market.ohlcv.ingestion_live import get_watch_list
 
 log = structlog.get_logger(__name__)
 

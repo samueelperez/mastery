@@ -12,8 +12,8 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.agent.tools._time import floor_to_timeframe, staleness_warning
-from app.indicators import IndicatorSpec, compute_panel
-from app.indicators.panel import grouped_columns
+from app.market.indicators import IndicatorSpec, compute_panel
+from app.market.indicators.panel import grouped_columns
 
 # Tipos de indicador "grouped": producen >1 columna o no aceptan length de
 # manera convencional (macd, vwap). Sub-columnas se agrupan bajo `latest[name]`

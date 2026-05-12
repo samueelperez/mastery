@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.dominance.provider import (
+from app.market.dominance.provider import (
     classify_regime,
     classify_trend,
     parse_coingecko_global,

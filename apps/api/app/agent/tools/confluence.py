@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.agent.tools._time import floor_to_timeframe, staleness_warning
-from app.indicators import IndicatorSpec, compute_panel
+from app.market.indicators import IndicatorSpec, compute_panel
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 

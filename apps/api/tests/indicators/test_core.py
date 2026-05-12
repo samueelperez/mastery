@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from app.indicators.core import atr, ema, rsi, sma
+from app.market.indicators.core import atr, ema, rsi, sma
 from tests.indicators.conftest import make_lf, py_atr, py_ema, py_rsi, py_sma
 
 

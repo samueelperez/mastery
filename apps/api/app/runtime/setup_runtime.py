@@ -46,7 +46,7 @@ from app.core.broadcasting.pubsub import market_channel, subscribe
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME
-from app.ingestion.live_klines import get_watch_list
+from app.market.ohlcv.ingestion_live import get_watch_list
 from app.runtime.post_mortem_dispatcher import maybe_run_post_mortem
 from app.runtime.review_dispatcher import maybe_run_review
 from app.runtime.risk_manager import (

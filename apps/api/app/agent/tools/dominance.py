@@ -25,7 +25,7 @@ from pydantic_ai import Agent, RunContext
 
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
-from app.dominance.provider import (
+from app.market.dominance.provider import (
     DominanceTrend,
     RegimeLabel,
     classify_regime,

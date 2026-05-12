@@ -36,7 +36,7 @@ from app.agent.tools.confluence import (
 from app.core.broadcasting.pubsub import publish_json, reviews_channel
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.storage.ohlcv_repo import fetch_range
+from app.market.ohlcv.repo import fetch_range
 from app.storage.post_mortem_repo import insert_post_mortem
 
 log = structlog.get_logger(__name__)

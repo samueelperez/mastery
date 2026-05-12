@@ -27,7 +27,7 @@ from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.core.exchanges.binance_adapter import BinanceAdapter
 from app.core.exchanges.exchange_context import ExchangeContext
-from app.storage.ohlcv_repo import fetch_range
+from app.market.ohlcv.repo import fetch_range
 
 # Funding extreme threshold: top quantile of |funding| over the lookback
 # window. 90% picks the genuinely tail-heavy fundings without overfitting

@@ -13,11 +13,11 @@ import polars as pl
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.indicators.core import atr, ema, rsi, sma
-from app.indicators.momentum import bbands, macd
-from app.indicators.trend import adx
-from app.indicators.volume import vwap
-from app.storage.ohlcv_repo import fetch_range
+from app.market.indicators.core import atr, ema, rsi, sma
+from app.market.indicators.momentum import bbands, macd
+from app.market.indicators.trend import adx
+from app.market.indicators.volume import vwap
+from app.market.ohlcv.repo import fetch_range
 
 IndicatorName = Literal["sma", "ema", "rsi", "atr", "macd", "bbands", "adx", "vwap"]
 

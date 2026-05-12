@@ -24,7 +24,7 @@ from app.core.exchanges.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.core.exchanges.exchange_context import ExchangeContext
 from app.core.exchanges.normalizer import timeframe_delta
 from app.core.observability.metrics import gap_fill_inserts_total, runtime_streams_alive
-from app.storage.ohlcv_repo import bulk_upsert, existing_ts_in_window, last_ts, upsert_one
+from app.market.ohlcv.repo import bulk_upsert, existing_ts_in_window, last_ts, upsert_one
 
 log = structlog.get_logger(__name__)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from app.indicators.trend import adx
+from app.market.indicators.trend import adx
 from tests.indicators.conftest import make_lf, py_ewm
 
 

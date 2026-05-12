@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools._time import floor_to_timeframe
 from app.core.exchanges.types import OHLCVCandle
-from app.storage.models import OHLCV
+from app.market.ohlcv.models import OHLCV
 
 
 async def bulk_upsert(session: AsyncSession, candles: Iterable[OHLCVCandle]) -> int:

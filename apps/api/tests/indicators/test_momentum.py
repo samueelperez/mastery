@@ -7,7 +7,7 @@ import statistics
 
 import pytest
 
-from app.indicators.momentum import bbands, macd
+from app.market.indicators.momentum import bbands, macd
 from tests.indicators.conftest import make_lf, py_ema
 
 

@@ -12,11 +12,11 @@ candles with `kline.is_closed=True`. Indicators trust this invariant and do
 not re-check it.
 """
 
-from app.indicators.core import atr, ema, rsi, sma
-from app.indicators.momentum import bbands, macd
-from app.indicators.panel import IndicatorSpec, compute_panel
-from app.indicators.trend import adx
-from app.indicators.volume import vwap
+from app.market.indicators.core import atr, ema, rsi, sma
+from app.market.indicators.momentum import bbands, macd
+from app.market.indicators.panel import IndicatorSpec, compute_panel
+from app.market.indicators.trend import adx
+from app.market.indicators.volume import vwap
 
 __all__ = [
     "IndicatorSpec",

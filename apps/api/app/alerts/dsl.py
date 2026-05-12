@@ -20,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.indicators.panel import IndicatorSpec
+from app.market.indicators.panel import IndicatorSpec
 
 Timeframe = Literal["15m", "1h", "4h", "1d"]
 Operator = Literal["<", "<=", "==", ">=", ">", "cross_above", "cross_below"]

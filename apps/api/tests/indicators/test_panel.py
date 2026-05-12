@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.indicators.panel import IndicatorSpec, compute_panel
-from app.storage.models import OHLCV
+from app.market.indicators.panel import IndicatorSpec, compute_panel
+from app.market.ohlcv.models import OHLCV
 
 
 def _fake_rows(n: int) -> list[OHLCV]:

@@ -12,8 +12,8 @@ from typing import Any
 import polars as pl
 
 from app.backtest.strategies import SignalFrame, register
-from app.indicators.core import atr
-from app.indicators.momentum import bbands
+from app.market.indicators.core import atr
+from app.market.indicators.momentum import bbands
 
 
 @register(

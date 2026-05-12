@@ -12,7 +12,7 @@ import polars as pl
 
 from app.alerts.dsl import Condition, RuleSpec
 from app.alerts.panel_service import _max_lookback, _union_specs
-from app.indicators import IndicatorSpec
+from app.market.indicators import IndicatorSpec
 
 
 def test_union_dedupes_by_name_length_source() -> None:
