@@ -21,7 +21,7 @@ from pydantic_ai.messages import (
 
 from app.agent.deps import AgentDeps
 from app.agent.models import PostMortem, ToolCitation
-from app.agent.post_mortem_validators import (
+from app.post_mortem.validators import (
     _is_valid_factor_key,
     register_post_mortem_validators,
 )

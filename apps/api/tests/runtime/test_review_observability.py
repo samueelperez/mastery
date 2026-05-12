@@ -8,8 +8,8 @@ panel admin/dashboards que los lee, este test grita.
 
 from __future__ import annotations
 
-from app.agent.review_system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
-from app.runtime.review_dispatcher import REVIEW_MODEL_ID
+from app.reviewer.dispatcher import REVIEW_MODEL_ID
+from app.reviewer.system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
 
 
 def test_review_constants_present() -> None:

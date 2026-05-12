@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.storage.post_mortem_repo import (
+from app.post_mortem.repo import (
     _cluster_lessons,
     _lesson_fingerprint,
 )

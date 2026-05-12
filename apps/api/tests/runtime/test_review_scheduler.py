@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.storage.review_repo import compute_next_review_at
+from app.reviewer.repo import compute_next_review_at
 
 
 def test_no_entry_hit_returns_none() -> None:

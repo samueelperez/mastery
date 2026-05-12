@@ -47,8 +47,9 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.market.ohlcv.ingestion_live import get_watch_list
-from app.runtime.post_mortem_dispatcher import maybe_run_post_mortem
-from app.runtime.review_dispatcher import maybe_run_review
+from app.post_mortem.dispatcher import maybe_run_post_mortem
+from app.reviewer.dispatcher import maybe_run_review
+from app.reviewer.repo import list_active_setups_due_for_time_review
 from app.setups.repo import (
     OpenSetupRow,
     has_approval_event,
@@ -67,7 +68,6 @@ from app.setups.risk_manager import (
     fetch_atr_for_trailing,
     max_hold_for_tf,
 )
-from app.storage.review_repo import list_active_setups_due_for_time_review
 
 log = structlog.get_logger(__name__)
 

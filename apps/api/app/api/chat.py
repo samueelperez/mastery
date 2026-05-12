@@ -34,7 +34,7 @@ from app.backtest.factor_stats_repo import get_top_factors_for_preamble
 from app.core.auth import require_user_id
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.storage.post_mortem_repo import (
+from app.post_mortem.repo import (
     RecurringLesson,
     get_recurring_lessons_for_preamble,
 )

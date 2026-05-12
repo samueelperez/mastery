@@ -23,18 +23,18 @@ from sqlalchemy import text
 
 from app.agent.deps import AgentDeps
 from app.agent.models import TradeReview, TriggerKind
-from app.agent.review_agent import REVIEW_MODEL_ID, get_review_agent
-from app.agent.review_system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
 from app.core.broadcasting.pubsub import publish_json, reviews_channel
 from app.core.config import get_settings
 from app.core.db import session_scope
-from app.setups.repo import OpenSetupRow
-from app.storage.review_repo import (
+from app.reviewer.agent import REVIEW_MODEL_ID, get_review_agent
+from app.reviewer.repo import (
     claim_review_slot,
     compute_next_review_at,
     get_last_reviews,
     insert_review,
 )
+from app.reviewer.system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
+from app.setups.repo import OpenSetupRow
 
 log = structlog.get_logger(__name__)
 

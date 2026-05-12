@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import get_settings
-from app.runtime.review_dispatcher import _extract_usage_and_cost
+from app.reviewer.dispatcher import _extract_usage_and_cost
 
 
 @dataclass

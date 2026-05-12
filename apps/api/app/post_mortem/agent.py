@@ -10,7 +10,7 @@ Distinto del main agent y del review_agent por:
   contrafactuales del estilo "qué habría pasado si...".
 - System prompt FROZEN y compacto (~500 tokens) para cache hot.
 
-Invocado por `app.runtime.post_mortem_dispatcher.maybe_run_post_mortem`
+Invocado por `app.post_mortem.dispatcher.maybe_run_post_mortem`
 cuando `setup_runtime` detecta SL hit o TP-all hit. Output `PostMortem` se
 persiste en `setup_post_mortems` + audit event 'review_generated' en
 `setup_events`.
@@ -24,8 +24,6 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 from app.agent.deps import AgentDeps
 from app.agent.models import PostMortem
-from app.agent.post_mortem_system_prompt import build_post_mortem_system_prompt
-from app.agent.post_mortem_validators import register_post_mortem_validators
 from app.agent.tools.factor_stats import register_factor_stats_tool
 from app.agent.tools.indicators import register_indicator_tools
 from app.agent.tools.journal_query import register_journal_query_tool
@@ -34,6 +32,8 @@ from app.agent.tools.perps_data import register_perps_data_tools
 from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
 from app.core.config import get_settings
+from app.post_mortem.system_prompt import build_post_mortem_system_prompt
+from app.post_mortem.validators import register_post_mortem_validators
 
 POST_MORTEM_MODEL_ID = "anthropic/claude-sonnet-4.6"
 

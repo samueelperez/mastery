@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.runtime.review_dispatcher import _build_review_user_prompt
+from app.reviewer.dispatcher import _build_review_user_prompt
 from app.setups.repo import OpenSetupRow
 
 

@@ -92,7 +92,7 @@ def _get_validator_callable(
     desde el agent state interno."""
     # Pydantic-AI stores them on the agent; the public API varies by version,
     # so we re-import the implementation and call it directly.
-    from app.agent.review_validators import register_review_validators as _r
+    from app.reviewer.validators import register_review_validators as _r
 
     captured: dict[str, Callable[..., Any]] = {}
 

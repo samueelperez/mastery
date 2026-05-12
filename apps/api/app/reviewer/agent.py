@@ -6,7 +6,7 @@ razones:
 - Tools subset (~7 vs 14) → menos coste, menos alucinación de tool calls.
 - Permite tunear modelo/thinking/max_tokens sin afectar el chat principal.
 
-Invocado por `app.runtime.review_dispatcher.maybe_run_review` cuando el
+Invocado por `app.reviewer.dispatcher.maybe_run_review` cuando el
 SetupRuntime detecta un trigger relevante. Output `TradeReview` se persiste
 en `setup_reviews` + audit event en `setup_events`.
 """
@@ -19,8 +19,6 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 
 from app.agent.deps import AgentDeps
 from app.agent.models import TradeReview
-from app.agent.review_system_prompt import build_review_system_prompt
-from app.agent.review_validators import register_review_validators
 from app.agent.tools.confluence import register_confluence_tools
 from app.agent.tools.correlation import register_correlation_tool
 from app.agent.tools.indicators import register_indicator_tools
@@ -29,6 +27,8 @@ from app.agent.tools.perps_data import register_perps_data_tools
 from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
 from app.core.config import get_settings
+from app.reviewer.system_prompt import build_review_system_prompt
+from app.reviewer.validators import register_review_validators
 
 # Mismo modelo que el main, pero con thinking más bajo y output cap menor.
 # Una review es estructuralmente más simple que un TradeIdea completo.

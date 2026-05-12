@@ -7,7 +7,7 @@ el cache en producción sin que un test grite.
 
 from __future__ import annotations
 
-from app.agent.review_system_prompt import (
+from app.reviewer.system_prompt import (
     REVIEW_SYSTEM_PROMPT_VERSION,
     build_review_system_prompt,
 )
