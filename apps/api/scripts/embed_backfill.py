@@ -13,11 +13,11 @@ import structlog
 
 from app.core.db import dispose_engine, init_engine, session_scope
 from app.journal.embeddings import INPUT_TYPE_DOCUMENT, embed_batch
-from app.journal.summary import build_summary_text, hash_summary
-from app.storage.journal_repo import (
+from app.journal.repo import (
     list_all_for_embed_check,
     update_summary_and_embedding,
 )
+from app.journal.summary import build_summary_text, hash_summary
 
 log = structlog.get_logger(__name__)
 

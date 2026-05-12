@@ -22,7 +22,7 @@ from app.agent.tools.similar_setups import (
     build_interpretation,
     build_query_text,
 )
-from app.storage.journal_repo import JournalSearchHit, PostMortemHitInfo
+from app.journal.repo import JournalSearchHit, PostMortemHitInfo
 
 # ----------------------------------------------------------------------------
 # build_query_text

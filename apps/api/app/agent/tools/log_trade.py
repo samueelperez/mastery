@@ -11,8 +11,8 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.journal.embeddings import embed_one
+from app.journal.repo import JournalTradeIn, insert_trade
 from app.journal.summary import build_summary_text, hash_summary
-from app.storage.journal_repo import JournalTradeIn, insert_trade
 
 
 def register_log_trade_tool(agent: Agent[AgentDeps, object]) -> None:

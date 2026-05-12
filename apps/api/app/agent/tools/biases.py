@@ -13,7 +13,7 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.journal.bias_detector import run_for_user
-from app.storage.journal_repo import list_recent_bias_events
+from app.journal.repo import list_recent_bias_events
 
 WindowOption = Literal["7d", "30d", "90d"]
 _WINDOW_DAYS = {"7d": 7, "30d": 30, "90d": 90}

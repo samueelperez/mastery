@@ -31,7 +31,7 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.journal.embeddings import INPUT_TYPE_QUERY, embed_one
-from app.storage.journal_repo import JournalSearchHit, hybrid_search
+from app.journal.repo import JournalSearchHit, hybrid_search
 
 Bias = Literal["bull", "bear", "range"]
 

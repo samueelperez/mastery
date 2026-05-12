@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from app.storage.journal_repo import hybrid_search
+from app.journal.repo import hybrid_search
 
 pytestmark = pytest.mark.asyncio
 
