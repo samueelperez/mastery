@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.runtime.review_dispatcher import _build_review_user_prompt
-from app.storage.setup_repo import OpenSetupRow
+from app.setups.repo import OpenSetupRow
 
 
 def _setup_with_thesis(**overrides: object) -> OpenSetupRow:

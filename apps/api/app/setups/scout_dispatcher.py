@@ -49,8 +49,8 @@ from app.core.observability.metrics import (
     scout_accepted_total,
     scout_drops_total,
 )
-from app.runtime.risk_manager import fetch_atr_for_trailing
-from app.storage.setup_repo import insert_setup_from_idea
+from app.setups.repo import insert_setup_from_idea
+from app.setups.risk_manager import fetch_atr_for_trailing
 
 log = structlog.get_logger(__name__)
 

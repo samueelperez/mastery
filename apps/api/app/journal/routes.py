@@ -24,6 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.backtest.factor_stats_repo import get_holdout_performance_summary
 from app.core.auth import require_user_id
 from app.core.db import session_dependency
+from app.setups.repo import (
+    cancel_setup,
+    count_setups_by_status,
+    get_setup_with_events,
+    list_setups,
+    winrate_by_setup_tag,
+)
 from app.storage.post_mortem_repo import (
     get_post_mortem_by_trade_id,
     list_post_mortems,
@@ -33,13 +40,6 @@ from app.storage.review_repo import (
 )
 from app.storage.review_repo import (
     list_reviews_for_setup,
-)
-from app.storage.setup_repo import (
-    cancel_setup,
-    count_setups_by_status,
-    get_setup_with_events,
-    list_setups,
-    winrate_by_setup_tag,
 )
 
 router = APIRouter()

@@ -28,11 +28,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import app.setups.scout_dispatcher as scout_dispatcher
+import app.setups.runtime as setup_runtime
 import pytest
 from sqlalchemy import text
 
-import app.runtime.scout_dispatcher as scout_dispatcher
-import app.runtime.setup_runtime as setup_runtime
 from app.agent.models import (
     Confluence,
     MarketRegime,
@@ -45,8 +45,8 @@ from app.core.observability.metrics import (
     scout_accepted_total,
     setup_transitions_total,
 )
-from app.runtime.scout_dispatcher import dispatch_scout_match
-from app.storage.setup_repo import has_approval_event
+from app.setups.repo import has_approval_event
+from app.setups.scout_dispatcher import dispatch_scout_match
 
 # Stable user_id so re-runs of the suite touch the same rows and the
 # cleanup at module teardown wipes them.
@@ -227,7 +227,7 @@ async def test_scout_to_setup_to_approval_smoke(
     assert approved is False, "no `approved` event should exist yet"
 
     # --- Step 4: approve_setup writes the event ------------------------------
-    from app.api.setups import approve_setup
+    from app.setups.routes import approve_setup
 
     approve_result = await approve_setup(setup_id, TEST_USER_ID)
     assert approve_result["status"] == "approved"
@@ -360,7 +360,7 @@ async def test_evaluate_setup_respects_approval_gate_with_real_db(
         )
 
     # Load it as OpenSetupRow.
-    from app.storage.setup_repo import list_open_setups
+    from app.setups.repo import list_open_setups
 
     async with session_scope() as session:
         opens = await list_open_setups(session)
@@ -397,7 +397,7 @@ async def test_evaluate_setup_respects_approval_gate_with_real_db(
     assert row["status"] == "pending"
 
     # --- Approve and retry — now transition fires ---------------------------
-    from app.api.setups import approve_setup
+    from app.setups.routes import approve_setup
 
     await approve_setup(setup_id, TEST_USER_ID)
 

@@ -28,13 +28,13 @@ from app.agent.review_system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
 from app.core.broadcasting.pubsub import publish_json, reviews_channel
 from app.core.config import get_settings
 from app.core.db import session_scope
+from app.setups.repo import OpenSetupRow
 from app.storage.review_repo import (
     claim_review_slot,
     compute_next_review_at,
     get_last_reviews,
     insert_review,
 )
-from app.storage.setup_repo import OpenSetupRow
 
 log = structlog.get_logger(__name__)
 

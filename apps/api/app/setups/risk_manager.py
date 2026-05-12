@@ -40,7 +40,7 @@ from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.core.observability.metrics import risk_actions_total
 from app.market.indicators.core import atr as compute_atr_indicator
 from app.market.ohlcv.repo import fetch_range
-from app.storage.setup_repo import OpenSetupRow
+from app.setups.repo import OpenSetupRow
 
 # -----------------------------------------------------------------------------
 # Actions

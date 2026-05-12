@@ -230,7 +230,7 @@ async def _handle_callback(cb: dict[str, Any]) -> None:
 
     # Internal call: shortcut the auth by using the same session_scope
     # the endpoint would have. We INSERT the same audit event directly.
-    from app.api.setups import approve_setup, reject_setup
+    from app.setups.routes import approve_setup, reject_setup
 
     try:
         if action == "a":

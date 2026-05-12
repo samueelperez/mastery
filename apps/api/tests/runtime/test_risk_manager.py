@@ -13,7 +13,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.runtime.risk_manager import (
+from app.setups.repo import OpenSetupRow
+from app.setups.risk_manager import (
     BreakevenAction,
     TimeStopAction,
     TrailingAction,
@@ -22,7 +23,6 @@ from app.runtime.risk_manager import (
     compute_unrealized_r,
     max_hold_for_tf,
 )
-from app.storage.setup_repo import OpenSetupRow
 
 # -----------------------------------------------------------------------------
 # Helpers

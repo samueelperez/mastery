@@ -15,8 +15,8 @@ import polars as pl
 
 from app.alerts.dsl import Condition, RuleSpec
 from app.alerts.evaluator import evaluate_rule
-from app.runtime.setup_runtime import _parse_conditions
-from app.storage.setup_repo import OpenSetupRow
+from app.setups.repo import OpenSetupRow
+from app.setups.runtime import _parse_conditions
 
 
 def _setup(invalidation_conditions: list[dict]) -> OpenSetupRow:

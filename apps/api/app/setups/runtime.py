@@ -49,7 +49,16 @@ from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.market.ohlcv.ingestion_live import get_watch_list
 from app.runtime.post_mortem_dispatcher import maybe_run_post_mortem
 from app.runtime.review_dispatcher import maybe_run_review
-from app.runtime.risk_manager import (
+from app.setups.repo import (
+    OpenSetupRow,
+    has_approval_event,
+    list_open_setups,
+    list_pending_with_expiry,
+    transition_status,
+    transition_to_invalidated,
+    update_targets_hits,
+)
+from app.setups.risk_manager import (
     BreakevenAction,
     TimeStopAction,
     TrailingAction,
@@ -59,15 +68,6 @@ from app.runtime.risk_manager import (
     max_hold_for_tf,
 )
 from app.storage.review_repo import list_active_setups_due_for_time_review
-from app.storage.setup_repo import (
-    OpenSetupRow,
-    has_approval_event,
-    list_open_setups,
-    list_pending_with_expiry,
-    transition_status,
-    transition_to_invalidated,
-    update_targets_hits,
-)
 
 log = structlog.get_logger(__name__)
 

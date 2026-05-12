@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from app.storage.setup_repo import DEFAULT_HOLDOUT_PCT, compute_is_holdout
+from app.setups.repo import DEFAULT_HOLDOUT_PCT, compute_is_holdout
 
 
 class TestComputeIsHoldout:

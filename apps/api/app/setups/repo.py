@@ -6,7 +6,7 @@ Vive sobre las mismas tablas que `journal_repo.py` extendidas en migration 005:
 - `setup_events`: audit trail de transiciones (proposed/entry_hit/sl_hit/...).
 
 El agente llama `insert_setup_from_idea` desde el output_validator cuando emite
-un TradeIdea direccional. El watcher (`app.runtime.setup_runtime`) consume
+un TradeIdea direccional. El watcher (`app.setups.runtime`) consume
 `list_open_setups` y aplica `transition_status` en cada cierre de candle.
 """
 

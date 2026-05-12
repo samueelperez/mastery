@@ -16,10 +16,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import app.setups.runtime as setup_runtime
 import pytest
 
-import app.runtime.setup_runtime as setup_runtime
-from app.storage.setup_repo import OpenSetupRow
+from app.setups.repo import OpenSetupRow
 
 
 def _setup(*, source: str, side: str = "long") -> OpenSetupRow:

@@ -243,7 +243,7 @@ async def _evaluate_close(symbol: str, timeframe: str) -> None:
         # Lazy import to avoid the agent module being imported by the alerts
         # runtime tests (and to keep the lifespan of the agent build out of
         # the alert path when the scout feature isn't in use).
-        from app.runtime.scout_dispatcher import dispatch_scout_match
+        from app.setups.scout_dispatcher import dispatch_scout_match
 
         async with session_scope() as session:
             for rule, _ in scout_hits:
