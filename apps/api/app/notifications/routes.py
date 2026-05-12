@@ -29,7 +29,7 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.notifications import bind as bind_flow
 from app.notifications import telegram as tg
-from app.storage.notification_repo import (
+from app.notifications.repo import (
     get_telegram_chat_id,
     set_telegram_chat_id,
     unbind_telegram,

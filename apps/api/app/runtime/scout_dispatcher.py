@@ -397,8 +397,8 @@ async def dispatch_scout_match(
     # persisted and visible in the UI. send_setup_alert swallows its own
     # exceptions and logs them.
     try:
+        from app.notifications.repo import get_telegram_chat_id
         from app.notifications.telegram import send_setup_alert
-        from app.storage.notification_repo import get_telegram_chat_id
 
         async with session_scope() as session:
             chat_id = await get_telegram_chat_id(session, user_id=user_id)

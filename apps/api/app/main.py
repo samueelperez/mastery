@@ -11,7 +11,6 @@ from app.alerts.runtime import AlertsRuntime
 from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.metrics import router as metrics_router
-from app.api.notifications import router as notifications_router
 from app.api.setups import router as setups_router
 from app.backtest.routes_backtests import router as backtests_router
 from app.backtest.routes_strategies import router as strategies_router
@@ -22,6 +21,7 @@ from app.journal.routes import router as journal_router
 from app.market.ohlcv.ingestion_live import LiveIngestion
 from app.market.ohlcv.routes import router as ohlcv_router
 from app.market.ws_routes import router as ws_router
+from app.notifications.routes import router as notifications_router
 from app.runtime.setup_runtime import SetupRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
