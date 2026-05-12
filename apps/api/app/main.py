@@ -6,8 +6,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.alerts.routes import router as alerts_router
 from app.alerts.runtime import AlertsRuntime
-from app.api.alerts import router as alerts_router
 from app.api.backtests import router as backtests_router
 from app.api.chat import router as chat_router
 from app.api.health import router as health_router

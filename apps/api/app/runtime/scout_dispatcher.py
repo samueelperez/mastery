@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.agent import get_agent
 from app.agent.deps import AgentDeps
 from app.agent.models import TradeIdea
+from app.alerts.cooldown import should_pause_scout
 from app.core.db import session_scope
 from app.core.observability.metrics import (
     agent_invocation_seconds,
@@ -49,7 +50,6 @@ from app.core.observability.metrics import (
     scout_drops_total,
 )
 from app.runtime.risk_manager import fetch_atr_for_trailing
-from app.storage.cooldown import should_pause_scout
 from app.storage.setup_repo import insert_setup_from_idea
 
 log = structlog.get_logger(__name__)

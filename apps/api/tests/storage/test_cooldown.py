@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.storage.cooldown import (
+from app.alerts.cooldown import (
     CONSEC_LOSSES_GLOBAL,
     CONSEC_LOSSES_SYMBOL,
     PAUSE_GLOBAL_H,
