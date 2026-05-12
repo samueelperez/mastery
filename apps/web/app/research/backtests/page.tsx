@@ -15,7 +15,7 @@ import {
   fetchStrategyRegistry,
   type BacktestRunSummaryDTO,
   type StrategyRegistryDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 import { WATCH_SYMBOLS } from "@/lib/store/active-symbol"
 
 const TIMEFRAMES = ["15m", "1h", "4h", "1d"] as const

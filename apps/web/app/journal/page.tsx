@@ -21,8 +21,8 @@ import {
   fetchSetups,
   type SetupListResponseDTO,
   type SetupStatus,
-} from "@/lib/api"
-import { computeStreak, computeWeekStats } from "@/lib/journal-rollup"
+} from "@/lib/core/api"
+import { computeStreak, computeWeekStats } from "@/lib/journal/rollup"
 
 export default function JournalPage() {
   const [source, setSource] = useState<SourceFilter>("agent")

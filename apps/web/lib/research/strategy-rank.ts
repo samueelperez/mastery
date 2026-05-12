@@ -13,7 +13,7 @@
  * pura. Strategies con menos de 5 cierres no compiten.
  */
 
-import type { StrategyWinrateDTO } from "./api"
+import type { StrategyWinrateDTO } from "@/lib/core/api"
 
 const N_CAP = 30
 const DEFAULT_MIN_N = 5

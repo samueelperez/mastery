@@ -12,13 +12,13 @@ import {
   type ConfluenceMapDTO,
   type MarketStructureDTO,
   type IndicatorPanelDTO,
-} from "@/lib/agent-outputs"
+} from "@/lib/agent/outputs"
 import {
   isBriefAnalysis,
   isTradeIdea,
   type TradeIdea,
   type Timeframe,
-} from "@/lib/chat-types"
+} from "@/lib/chat/types"
 import {
   isTimeframe,
   isWatchSymbol,

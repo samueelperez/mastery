@@ -32,13 +32,13 @@ import {
   type SetupDetailDTO,
   type SetupEventDTO,
   type SetupTargetDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 import {
   CHAT_SEED_REVIEW_KEY,
   type ChatSeedReview,
-} from "@/lib/chat-seed-review"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import { cn } from "@/lib/utils"
+} from "@/lib/chat/seed-review"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import { cn } from "@/lib/core/utils"
 
 interface SetupDetailPanelProps {
   setupId: string | null
@@ -940,7 +940,7 @@ function Timeline({ data }: { data: SetupDetailDTO }) {
 function buildTradeReviewFromEvent(
   data: SetupDetailDTO,
   e: SetupEventDTO,
-): import("@/lib/ws").TradeReviewPayload | null {
+): import("@/lib/core/ws").TradeReviewPayload | null {
   const p = e.payload as Record<string, unknown>
   const reviewId = typeof p.review_id === "string" ? p.review_id : null
   const summary = typeof p.summary === "string" ? p.summary : null

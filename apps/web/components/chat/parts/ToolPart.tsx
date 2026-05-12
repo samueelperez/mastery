@@ -7,7 +7,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool"
-import { toolLabel } from "@/lib/tool-labels"
+import { toolLabel } from "@/lib/chat/tool-labels"
 import type { DynamicToolUIPart, ToolUIPart } from "ai"
 
 interface ToolPartProps {

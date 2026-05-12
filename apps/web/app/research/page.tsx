@@ -11,9 +11,9 @@ import {
   fetchSetups,
   type BacktestRunSummaryDTO,
   type SetupListResponseDTO,
-} from "@/lib/api"
-import { tierStrategies } from "@/lib/edge-state"
-import { computeOverviewKpi } from "@/lib/research-rollup"
+} from "@/lib/core/api"
+import { tierStrategies } from "@/lib/research/edge-state"
+import { computeOverviewKpi } from "@/lib/research/rollup"
 
 export default function ResearchOverviewPage() {
   const backtests = useQuery<BacktestRunSummaryDTO[]>({

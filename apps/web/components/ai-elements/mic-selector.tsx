@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import { ChevronsUpDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {

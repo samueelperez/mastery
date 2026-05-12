@@ -8,8 +8,8 @@ import {
 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { StrategyMetricsDTO } from "@/lib/api"
-import { verdictOf } from "@/lib/backtest-verdict"
+import type { StrategyMetricsDTO } from "@/lib/core/api"
+import { verdictOf } from "@/lib/research/backtest-verdict"
 
 interface BacktestVerdictProps {
   metrics: StrategyMetricsDTO | null

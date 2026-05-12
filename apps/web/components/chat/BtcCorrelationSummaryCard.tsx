@@ -11,8 +11,8 @@ import {
   isBtcCorrelation,
   type BtcCorrelationDTO,
   type ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface BtcCorrelationSummaryCardProps {
   output: ToolResultEnvelope<BtcCorrelationDTO> | BtcCorrelationDTO

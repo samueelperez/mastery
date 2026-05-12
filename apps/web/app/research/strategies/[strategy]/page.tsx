@@ -6,7 +6,7 @@ import { useParams } from "next/navigation"
 
 import { StrategyDetail } from "@/components/research/StrategyDetail"
 import { Spinner } from "@/components/ui/spinner"
-import { fetchSetups, type SetupListResponseDTO } from "@/lib/api"
+import { fetchSetups, type SetupListResponseDTO } from "@/lib/core/api"
 
 export default function StrategyDetailPage() {
   const params = useParams<{ strategy: string }>()

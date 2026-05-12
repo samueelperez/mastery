@@ -1,6 +1,6 @@
 import type { Time } from "lightweight-charts"
 
-import type { CandleDTO } from "@/lib/api"
+import type { CandleDTO } from "@/lib/core/api"
 
 export interface LinePoint {
   time: Time

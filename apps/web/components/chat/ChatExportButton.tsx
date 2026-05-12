@@ -9,12 +9,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { authClient } from "@/lib/auth/auth-client"
+import { authClient } from "@/lib/core/auth/auth-client"
 import {
   downloadMarkdown,
   exportChatToMarkdown,
-} from "@/lib/chat-md-export"
-import { cn } from "@/lib/utils"
+} from "@/lib/chat/md-export"
+import { cn } from "@/lib/core/utils"
 
 const ALLOWED_EMAIL = "samuelpt@lienzzo.com"
 

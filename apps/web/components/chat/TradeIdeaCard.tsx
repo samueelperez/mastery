@@ -27,14 +27,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 import type {
   Bias,
   Confidence,
   Direction,
   ToolCitation,
   TradeIdea,
-} from "@/lib/chat-types"
+} from "@/lib/chat/types"
 
 interface TradeIdeaCardProps {
   idea: TradeIdea

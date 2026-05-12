@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { fetchJournalTrade } from "@/lib/api"
-import type { JournalTradeListRowDTO } from "@/lib/api"
+import { fetchJournalTrade } from "@/lib/core/api"
+import type { JournalTradeListRowDTO } from "@/lib/core/api"
 
 interface JournalEntryCardProps {
   trade: JournalTradeListRowDTO

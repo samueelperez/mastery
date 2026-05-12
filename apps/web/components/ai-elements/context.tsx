@@ -7,7 +7,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import type { LanguageModelUsage } from "ai";
 import type { ComponentProps } from "react";
 import { createContext, useContext, useMemo } from "react";

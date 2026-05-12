@@ -1,4 +1,4 @@
-import type { TradeReviewPayload } from "@/lib/ws"
+import type { TradeReviewPayload } from "@/lib/core/ws"
 
 export const CHAT_SEED_REVIEW_KEY = "mt.chat_seed_review"
 

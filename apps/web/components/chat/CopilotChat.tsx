@@ -7,21 +7,21 @@ import {
 } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { Card } from "@/components/ui/card"
-import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
-import { env } from "@/lib/env"
-import { isBriefAnalysis, isTradeIdea } from "@/lib/chat-types"
+import { BEARER_TOKEN_KEY } from "@/lib/core/auth/auth-client"
+import { env } from "@/lib/core/env"
+import { isBriefAnalysis, isTradeIdea } from "@/lib/chat/types"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type DynamicToolUIPart, type ToolUIPart } from "ai"
 import { useEffect, useState } from "react"
 
-import { readChatSeedReview } from "@/lib/chat-seed-review"
+import { readChatSeedReview } from "@/lib/chat/seed-review"
 
 import { ChatComposer } from "./ChatComposer"
 import { ChatEmptyState } from "./ChatEmptyState"
 
 import { BrandMark } from "@/components/nav/BrandMark"
 import { useActiveSymbol } from "@/lib/store/active-symbol"
-import { toolLabel } from "@/lib/tool-labels"
+import { toolLabel } from "@/lib/chat/tool-labels"
 
 import { AlertCreatedCard, type AlertCreatedToolOutput } from "./AlertCreatedCard"
 import { BacktestResultCard, type BacktestToolOutput } from "./BacktestResultCard"
@@ -67,8 +67,8 @@ import { TradeIdeaCard } from "./TradeIdeaCard"
 import { TradeReviewCard } from "./TradeReviewCard"
 import { useSymbolBridge } from "./useSymbolBridge"
 import { useTradeReviewsStream } from "@/hooks/useTradeReviewsStream"
-import { readChatSeedPostMortem } from "@/lib/chat-seed-post-mortem"
-import type { PostMortemPayload, TradeReviewPayload } from "@/lib/ws"
+import { readChatSeedPostMortem } from "@/lib/chat/seed-post-mortem"
+import type { PostMortemPayload, TradeReviewPayload } from "@/lib/core/ws"
 
 function isTradeReviewPayload(value: unknown): value is TradeReviewPayload {
   if (!value || typeof value !== "object") return false

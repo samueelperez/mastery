@@ -6,9 +6,9 @@ import { useMemo, useState } from "react"
 
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { StrategyWinrateDTO } from "@/lib/api"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import { cn } from "@/lib/utils"
+import type { StrategyWinrateDTO } from "@/lib/core/api"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import { cn } from "@/lib/core/utils"
 
 type SortKey = "n_closed" | "win_rate_pct" | "avg_r" | "last_closed_at"
 

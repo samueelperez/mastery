@@ -16,8 +16,8 @@ import {
 import type {
   ConfluenceMapDTO,
   ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface ConfluenceSummaryCardProps {
   output: ToolResultEnvelope<ConfluenceMapDTO> | ConfluenceMapDTO

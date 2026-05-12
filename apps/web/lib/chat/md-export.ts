@@ -16,7 +16,7 @@
 
 import type { UIMessage, ToolUIPart, DynamicToolUIPart } from "ai"
 
-import { isBriefAnalysis, isTradeIdea } from "./chat-types"
+import { isBriefAnalysis, isTradeIdea } from "./types"
 
 const MAX_PRETTY_JSON_CHARS = 1500
 const MAX_OUTPUT_PRETTY_CHARS = 2500

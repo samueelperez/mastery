@@ -14,9 +14,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { SetupListRowDTO, SetupStatus } from "@/lib/api"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import { cn } from "@/lib/utils"
+import type { SetupListRowDTO, SetupStatus } from "@/lib/core/api"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import { cn } from "@/lib/core/utils"
 
 interface SetupCardProps {
   setup: SetupListRowDTO

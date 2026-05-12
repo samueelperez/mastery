@@ -13,8 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { authClient, clearBearerToken } from "@/lib/auth/auth-client"
-import { cn } from "@/lib/utils"
+import { authClient, clearBearerToken } from "@/lib/core/auth/auth-client"
+import { cn } from "@/lib/core/utils"
 
 function initials(input: string | null | undefined): string {
   if (!input) return "?"

@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query"
 
-import { cn } from "@/lib/utils"
-import { fetchHealth } from "@/lib/api"
+import { cn } from "@/lib/core/utils"
+import { fetchHealth } from "@/lib/core/api"
 
 /** Live data-plane indicator for the global nav — `.pill` style.
  *

@@ -12,7 +12,7 @@
  * algo similar para week stats.
  */
 
-import type { SetupListRowDTO } from "./api"
+import type { SetupListRowDTO } from "@/lib/core/api"
 
 const LEARNING_THRESHOLD = 10
 

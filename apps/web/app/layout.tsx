@@ -4,7 +4,7 @@ import "./globals.css"
 import { GlobalNav } from "@/components/nav/GlobalNav"
 import { Statusbar } from "@/components/nav/Statusbar"
 import { Providers } from "@/components/providers"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 // Geist Sans (Vercel) pareja con JetBrains Mono — geometría coherente.
 // Sustituye a Inter_Tight, que estaba cargada pero el body forzaba mono

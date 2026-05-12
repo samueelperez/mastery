@@ -6,8 +6,8 @@ import { AlertTriangleIcon } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
-import { fetchBacktest, type BacktestRunSummaryDTO } from "@/lib/api"
+import { cn } from "@/lib/core/utils"
+import { fetchBacktest, type BacktestRunSummaryDTO } from "@/lib/core/api"
 
 interface BacktestListProps {
   runs: BacktestRunSummaryDTO[]

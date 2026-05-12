@@ -11,8 +11,8 @@ import {
   isVolumeProfile,
   type ToolResultEnvelope,
   type VolumeProfileDTO,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface VolumeProfileSummaryCardProps {
   output: ToolResultEnvelope<VolumeProfileDTO> | VolumeProfileDTO

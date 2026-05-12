@@ -16,7 +16,7 @@
  * Si `metrics === null` (run en `running` o `error`), devolvemos `pending`.
  */
 
-import type { StrategyMetricsDTO } from "./api"
+import type { StrategyMetricsDTO } from "@/lib/core/api"
 
 export type Verdict = "strong" | "marginal" | "weak" | "overfit" | "pending"
 

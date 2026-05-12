@@ -9,8 +9,8 @@ import {
   SheetContent,
   SheetTitle,
 } from "@/components/ui/sheet"
-import type { SetupListRowDTO } from "@/lib/api"
-import { formatSetupTag } from "@/lib/format-setup-tag"
+import type { SetupListRowDTO } from "@/lib/core/api"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
 
 import { StrategyRCurve } from "./StrategyRCurve"
 

@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useState } from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 /** Mapeo símbolo → ruta del SVG. Coincide con `apps/web/public/crypto/*.svg`.
  * Símbolos no listados caen al fallback (círculo + letra). */

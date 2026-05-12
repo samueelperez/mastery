@@ -4,7 +4,7 @@ import { ArrowRightIcon } from "lucide-react"
 import Link from "next/link"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { EdgeTiers } from "@/lib/edge-state"
+import type { EdgeTiers } from "@/lib/research/edge-state"
 
 interface EdgeStateTiersProps {
   tiers: EdgeTiers

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 
-import { type AlertEventPayload, type AlertWsMessage, connectAlertsWs } from "@/lib/ws"
+import { type AlertEventPayload, type AlertWsMessage, connectAlertsWs } from "@/lib/core/ws"
 
 export interface UseAlertStreamResult {
   /** Most-recent N events received from the WS this session (newest first). */

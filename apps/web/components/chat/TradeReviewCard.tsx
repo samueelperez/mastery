@@ -15,8 +15,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import type { TradeReviewPayload } from "@/lib/ws"
-import { cn } from "@/lib/utils"
+import type { TradeReviewPayload } from "@/lib/core/ws"
+import { cn } from "@/lib/core/utils"
 
 interface TradeReviewCardProps {
   review: TradeReviewPayload

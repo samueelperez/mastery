@@ -3,7 +3,7 @@
 // _envelope.py (ToolResult envelope). F2 introducirá datamodel-code-generator
 // sobre el OpenAPI; por ahora a mano.
 
-import type { Timeframe } from "./chat-types"
+import type { Timeframe } from "@/lib/chat/types"
 
 // ---------------------------------------------------------------------------
 // Envelope (ToolResult[T] del backend)

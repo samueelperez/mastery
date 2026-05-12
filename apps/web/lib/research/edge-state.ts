@@ -12,7 +12,7 @@
  * timeframe), promocionar a backend.
  */
 
-import type { BacktestRunSummaryDTO } from "./api"
+import type { BacktestRunSummaryDTO } from "@/lib/core/api"
 import { verdictOf } from "./backtest-verdict"
 
 /** Para cada `strategy_id` devuelve su mejor run (mayor DSR; ties → más

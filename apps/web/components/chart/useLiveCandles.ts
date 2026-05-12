@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
-import { fetchOhlcv, type CandleDTO } from "@/lib/api"
-import { connectMarketWs, type KlinePayload, type MarketWsMessage } from "@/lib/ws"
+import { fetchOhlcv, type CandleDTO } from "@/lib/core/api"
+import { connectMarketWs, type KlinePayload, type MarketWsMessage } from "@/lib/core/ws"
 
 export interface LiveCandle extends CandleDTO {
   isClosed?: boolean

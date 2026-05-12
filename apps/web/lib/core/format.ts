@@ -2,7 +2,7 @@
  * /research and /alerts. Keep these pure and side-effect-free; locale defaults
  * follow the user's browser. */
 
-import type { AlertConditionDTO } from "@/lib/api"
+import type { AlertConditionDTO } from "@/lib/core/api"
 
 /** "May 4 14:30" — used by recent-events tables where date + 24h time both matter. */
 export function formatShortDateTime(ts: string): string {

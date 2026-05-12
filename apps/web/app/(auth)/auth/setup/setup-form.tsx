@@ -11,8 +11,8 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { authClient } from "@/lib/auth/auth-client"
-import { cn } from "@/lib/utils"
+import { authClient } from "@/lib/core/auth/auth-client"
+import { cn } from "@/lib/core/utils"
 
 export function SetupForm() {
   const queryClient = useQueryClient()

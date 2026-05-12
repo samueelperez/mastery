@@ -4,8 +4,8 @@ import { ActivityIcon, BellOffIcon, BellRingIcon } from "lucide-react"
 import { useMemo } from "react"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { AlertEventDTO, AlertRuleDTO } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import type { AlertEventDTO, AlertRuleDTO } from "@/lib/core/api"
+import { cn } from "@/lib/core/utils"
 
 interface AlertsHeroProps {
   rules: AlertRuleDTO[]

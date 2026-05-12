@@ -3,8 +3,8 @@
 // import the lower-level `ReconnectingWebSocket` from `partysocket/ws`.
 import ReconnectingWebSocket from "partysocket/ws"
 
-import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
-import { env } from "@/lib/env"
+import { BEARER_TOKEN_KEY } from "@/lib/core/auth/auth-client"
+import { env } from "@/lib/core/env"
 
 /** Browsers no permiten Authorization header en WebSocket. Pasamos el
  * BetterAuth bearer token (capturado en login y persistido en localStorage)

@@ -19,9 +19,9 @@ import {
   fetchAlertEvents,
   markEventSeen,
   type AlertEventDTO,
-} from "@/lib/api"
-import { formatTimeAgo } from "@/lib/format"
-import { cn } from "@/lib/utils"
+} from "@/lib/core/api"
+import { formatTimeAgo } from "@/lib/core/format"
+import { cn } from "@/lib/core/utils"
 
 type SeverityFilter = "all" | "high" | "medium" | "low"
 type StatusFilter = "all" | "unread"

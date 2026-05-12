@@ -9,7 +9,7 @@ import {
   fetchStrategyRegistry,
   type BacktestRunDetailDTO,
   type StrategyRegistryDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 
 import { AdvancedDiagnostics } from "./AdvancedDiagnostics"
 import { BacktestVerdict } from "./BacktestVerdict"

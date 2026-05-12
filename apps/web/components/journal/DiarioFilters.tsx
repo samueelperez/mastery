@@ -5,7 +5,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
-import type { SetupStatus, SetupStatusCountsDTO } from "@/lib/api"
+import type { SetupStatus, SetupStatusCountsDTO } from "@/lib/core/api"
 import { WATCH_SYMBOLS } from "@/lib/store/active-symbol"
 
 export type SourceFilter = "all" | "agent"

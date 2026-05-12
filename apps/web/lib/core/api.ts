@@ -1,5 +1,5 @@
-import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
-import { env } from "@/lib/env"
+import { BEARER_TOKEN_KEY } from "@/lib/core/auth/auth-client"
+import { env } from "@/lib/core/env"
 
 function readBearerToken(): string | null {
   if (typeof window === "undefined") return null

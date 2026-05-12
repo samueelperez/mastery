@@ -12,8 +12,8 @@ import {
   type FundingBias,
   type FundingRateDTO,
   type ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface FundingRateSummaryCardProps {
   output: ToolResultEnvelope<FundingRateDTO> | FundingRateDTO

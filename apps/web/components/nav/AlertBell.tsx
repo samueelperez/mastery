@@ -11,8 +11,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { useAlertStream } from "@/hooks/useAlertStream"
-import { fetchAlertEvents } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { fetchAlertEvents } from "@/lib/core/api"
+import { cn } from "@/lib/core/utils"
 
 export function AlertBell() {
   const [open, setOpen] = useState(false)

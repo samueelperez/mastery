@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import type { LucideProps } from "lucide-react";
 import { BookmarkIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";

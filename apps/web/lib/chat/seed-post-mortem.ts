@@ -1,4 +1,4 @@
-import type { PostMortemPayload } from "@/lib/ws"
+import type { PostMortemPayload } from "@/lib/core/ws"
 
 export const CHAT_SEED_POST_MORTEM_KEY = "mt.chat_seed_post_mortem"
 

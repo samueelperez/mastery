@@ -3,8 +3,8 @@
 import Link from "next/link"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { verdictOf } from "@/lib/backtest-verdict"
-import type { BacktestRunSummaryDTO, StrategyRegistryDTO } from "@/lib/api"
+import { verdictOf } from "@/lib/research/backtest-verdict"
+import type { BacktestRunSummaryDTO, StrategyRegistryDTO } from "@/lib/core/api"
 
 interface BacktestCardProps {
   run: BacktestRunSummaryDTO

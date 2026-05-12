@@ -7,8 +7,8 @@ import {
 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { BacktestRunDetailDTO } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import type { BacktestRunDetailDTO } from "@/lib/core/api"
+import { cn } from "@/lib/core/utils"
 
 interface BehaviorTriadProps {
   run: BacktestRunDetailDTO

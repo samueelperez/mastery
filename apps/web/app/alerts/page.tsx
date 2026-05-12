@@ -18,7 +18,7 @@ import {
   fetchAlerts,
   type AlertEventDTO,
   type AlertRuleDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 
 export default function AlertsPage() {
   const rulesQuery = useQuery<AlertRuleDTO[]>({

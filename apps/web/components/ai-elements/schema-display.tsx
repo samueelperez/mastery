@@ -6,7 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import { ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { createContext, useContext, useMemo } from "react";

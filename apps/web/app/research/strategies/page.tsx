@@ -6,8 +6,8 @@ import { useMemo } from "react"
 import { BestStrategyHero } from "@/components/research/BestStrategyHero"
 import { StrategyWinrateTable } from "@/components/research/StrategyWinrateTable"
 import { Skeleton } from "@/components/ui/skeleton"
-import { fetchStrategyWinrate, type StrategyWinrateDTO } from "@/lib/api"
-import { pickBestStrategy } from "@/lib/strategy-rank"
+import { fetchStrategyWinrate, type StrategyWinrateDTO } from "@/lib/core/api"
+import { pickBestStrategy } from "@/lib/research/strategy-rank"
 
 export default function StrategiesPage() {
   const { data, isLoading, error } = useQuery<StrategyWinrateDTO[]>({

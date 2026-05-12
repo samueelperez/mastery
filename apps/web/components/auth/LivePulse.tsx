@@ -3,9 +3,9 @@
 import { useQuery } from "@tanstack/react-query"
 import { ActivityIcon, FlaskConicalIcon, BellRingIcon } from "lucide-react"
 
-import { fetchOhlcv } from "@/lib/api"
-import { formatTimeAgo } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { fetchOhlcv } from "@/lib/core/api"
+import { formatTimeAgo } from "@/lib/core/format"
+import { cn } from "@/lib/core/utils"
 
 interface LiveRowProps {
   icon: React.ReactNode

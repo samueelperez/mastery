@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
-import { fetchHealth } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { fetchHealth } from "@/lib/core/api"
+import { cn } from "@/lib/core/utils"
 
 /** Statusbar 22px sticky-bottom — sólo se renderiza fuera de /auth.
  *

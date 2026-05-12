@@ -9,7 +9,7 @@
  * Funciones puras — fáciles de testear, sin estado React.
  */
 
-import type { SetupListRowDTO } from "./api"
+import type { SetupListRowDTO } from "@/lib/core/api"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS

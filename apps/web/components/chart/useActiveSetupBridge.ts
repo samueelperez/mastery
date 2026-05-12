@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { useEffect } from "react"
 
-import { fetchSetups, type SetupListRowDTO } from "@/lib/api"
-import type { Timeframe } from "@/lib/chat-types"
+import { fetchSetups, type SetupListRowDTO } from "@/lib/core/api"
+import type { Timeframe } from "@/lib/chat/types"
 import { isWatchSymbol } from "@/lib/store/active-symbol"
 import {
   useChartOverlays,

@@ -15,8 +15,8 @@ import {
 import type {
   MarketStructureDTO,
   ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface StructureSummaryCardProps {
   output: ToolResultEnvelope<MarketStructureDTO> | MarketStructureDTO

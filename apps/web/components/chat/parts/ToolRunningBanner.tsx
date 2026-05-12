@@ -15,8 +15,8 @@ import {
 import type { ReactNode } from "react"
 
 import { Spinner } from "@/components/ui/spinner"
-import { toolLabel } from "@/lib/tool-labels"
-import { cn } from "@/lib/utils"
+import { toolLabel } from "@/lib/chat/tool-labels"
+import { cn } from "@/lib/core/utils"
 
 interface ToolRunningBannerProps {
   toolName: string

@@ -15,8 +15,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import type { PostMortemPayload } from "@/lib/ws"
-import { cn } from "@/lib/utils"
+import type { PostMortemPayload } from "@/lib/core/ws"
+import { cn } from "@/lib/core/utils"
 
 interface PostMortemCardProps {
   postMortem: PostMortemPayload

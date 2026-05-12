@@ -7,7 +7,7 @@ import {
   type PostMortemPayload,
   type ReviewWsMessage,
   type TradeReviewPayload,
-} from "@/lib/ws"
+} from "@/lib/core/ws"
 
 export interface UseTradeReviewsStreamResult {
   connected: boolean
