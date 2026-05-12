@@ -16,9 +16,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import app.setups.runtime as setup_runtime
 import pytest
 
+import app.setups.runtime as setup_runtime
 from app.setups.repo import OpenSetupRow
 
 

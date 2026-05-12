@@ -28,11 +28,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import app.setups.scout_dispatcher as scout_dispatcher
-import app.setups.runtime as setup_runtime
 import pytest
 from sqlalchemy import text
 
+import app.setups.runtime as setup_runtime
+import app.setups.scout_dispatcher as scout_dispatcher
 from app.agent.models import (
     Confluence,
     MarketRegime,
