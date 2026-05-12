@@ -6,11 +6,9 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.agent.routes import router as chat_router
 from app.alerts.routes import router as alerts_router
 from app.alerts.runtime import AlertsRuntime
-from app.api.chat import router as chat_router
-from app.api.health import router as health_router
-from app.api.metrics import router as metrics_router
 from app.backtest.routes_backtests import router as backtests_router
 from app.backtest.routes_strategies import router as strategies_router
 from app.core.broadcasting.pubsub import close_client as close_valkey
@@ -21,6 +19,8 @@ from app.market.ohlcv.ingestion_live import LiveIngestion
 from app.market.ohlcv.routes import router as ohlcv_router
 from app.market.ws_routes import router as ws_router
 from app.notifications.routes import router as notifications_router
+from app.platform_routes.health import router as health_router
+from app.platform_routes.metrics import router as metrics_router
 from app.setups.routes import router as setups_router
 from app.setups.runtime import SetupRuntime
 
