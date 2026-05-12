@@ -1225,7 +1225,7 @@ def register_validators(
             # Crypto perps slip more than the chart suggests; the buffer
             # raises the NOMINAL R:R required so the post-fill realized
             # ratio still beats 1.5. Tunable per symbol in Settings.
-            from app.config import get_settings
+            from app.core.config import get_settings
 
             slippage_buffer = get_settings().slippage_buffer_r(output.symbol)
             min_rr = 1.5 + slippage_buffer

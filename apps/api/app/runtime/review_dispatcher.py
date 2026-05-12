@@ -25,9 +25,9 @@ from app.agent.deps import AgentDeps
 from app.agent.models import TradeReview, TriggerKind
 from app.agent.review_agent import REVIEW_MODEL_ID, get_review_agent
 from app.agent.review_system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
-from app.broadcasting.pubsub import publish_json, reviews_channel
-from app.config import get_settings
-from app.db import session_scope
+from app.core.broadcasting.pubsub import publish_json, reviews_channel
+from app.core.config import get_settings
+from app.core.db import session_scope
 from app.storage.review_repo import (
     claim_review_slot,
     compute_next_review_at,

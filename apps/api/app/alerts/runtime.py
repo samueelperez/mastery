@@ -34,10 +34,10 @@ from app.agent.tools._time import floor_to_timeframe
 from app.alerts.dsl import RuleSpec
 from app.alerts.evaluator import build_snapshot, evaluate_rule
 from app.alerts.panel_service import compute_panel_for_specs
-from app.broadcasting.pubsub import market_channel, publish_json, subscribe
-from app.config import get_settings
-from app.data.binance_adapter import EXCHANGE_NAME
-from app.db import session_scope
+from app.core.broadcasting.pubsub import market_channel, publish_json, subscribe
+from app.core.config import get_settings
+from app.core.db import session_scope
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.ingestion.live_klines import get_watch_list
 
 log = structlog.get_logger(__name__)

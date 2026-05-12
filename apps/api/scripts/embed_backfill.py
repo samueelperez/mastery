@@ -11,7 +11,7 @@ import asyncio
 
 import structlog
 
-from app.db import dispose_engine, init_engine, session_scope
+from app.core.db import dispose_engine, init_engine, session_scope
 from app.journal.embeddings import INPUT_TYPE_DOCUMENT, embed_batch
 from app.journal.summary import build_summary_text, hash_summary
 from app.storage.journal_repo import (

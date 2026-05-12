@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import session_dependency
+from app.core.db import session_dependency
 
 router = APIRouter()
 

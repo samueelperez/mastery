@@ -36,7 +36,7 @@ from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
 from app.agent.tools.walk_forward import register_walk_forward_tool
 from app.agent.validators import register_validators
-from app.config import get_settings
+from app.core.config import get_settings
 
 # Default model for chat. Deep-dive (Opus 4.7) is plumbed in but not toggled
 # automatically in F1 — F2 will surface a UI selector.

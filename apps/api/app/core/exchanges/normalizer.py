@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
-from app.data.types import OHLCVCandle
+from app.core.exchanges.types import OHLCVCandle
 
 # Map CCXT timeframe strings to a (count, unit) pair so we can compute
 # the kline's expected close time (used to infer is_closed).

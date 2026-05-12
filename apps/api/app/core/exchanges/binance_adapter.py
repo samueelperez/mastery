@@ -20,9 +20,9 @@ from typing import TYPE_CHECKING
 import ccxt.pro as ccxtpro
 import structlog
 
-from app.data.exchange_context import ExchangeContext
-from app.data.normalizer import normalize_ccxt_ohlcv
-from app.data.types import OHLCVCandle
+from app.core.exchanges.exchange_context import ExchangeContext
+from app.core.exchanges.normalizer import normalize_ccxt_ohlcv
+from app.core.exchanges.types import OHLCVCandle
 
 if TYPE_CHECKING:
     from ccxt.async_support.base.exchange import Exchange

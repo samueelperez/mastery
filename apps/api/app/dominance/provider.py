@@ -25,8 +25,8 @@ import httpx
 import structlog
 from pydantic import BaseModel
 
-from app.broadcasting.pubsub import get_client
-from app.config import get_settings
+from app.core.broadcasting.pubsub import get_client
+from app.core.config import get_settings
 
 log = structlog.get_logger(__name__)
 

@@ -17,13 +17,12 @@ from typing import Any
 from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
-from app.backtest.strategies import STRATEGY_REGISTRY
-
 # Importar los módulos de estrategias asegura que sus decoradores
 # `@register` se ejecuten y pueblen STRATEGY_REGISTRY. Sin estos imports
 # el registry está vacío al levantar el módulo independiente.
 import app.backtest.strategies.bollinger_reversion  # noqa: F401
 import app.backtest.strategies.ema_cross  # noqa: F401
+from app.backtest.strategies import STRATEGY_REGISTRY
 
 router = APIRouter()
 

@@ -21,8 +21,8 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_user_id
-from app.db import session_dependency
+from app.core.auth import require_user_id
+from app.core.db import session_dependency
 from app.storage.factor_stats_repo import get_holdout_performance_summary
 from app.storage.post_mortem_repo import (
     get_post_mortem_by_trade_id,

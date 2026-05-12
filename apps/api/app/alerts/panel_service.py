@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools._time import floor_to_timeframe
 from app.alerts.dsl import RuleSpec
-from app.data.binance_adapter import EXCHANGE_NAME
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.indicators import IndicatorSpec, compute_panel
 
 

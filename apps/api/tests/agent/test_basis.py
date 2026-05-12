@@ -19,7 +19,7 @@ from app.agent.tools.basis import (
     compute_basis_pct,
     percentile,
 )
-from app.data.spot_adapter import _to_spot_symbol
+from app.core.exchanges.spot_adapter import _to_spot_symbol
 
 # ----------------------------------------------------------------------------
 # compute_basis_pct

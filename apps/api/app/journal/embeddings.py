@@ -19,7 +19,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 EMBEDDING_MODEL = "voyage-4-large"
 EMBEDDING_DIM = 1024  # voyage-4 family Matryoshka default; matches DB column

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.agent.models import MarketRegime, Scenario, TradeIdea, ToolCitation
+from app.agent.models import MarketRegime, Scenario, ToolCitation, TradeIdea
 
 
 def _regime() -> MarketRegime:

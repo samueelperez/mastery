@@ -19,7 +19,6 @@ from app.storage.cooldown import (
     evaluate_streak,
 )
 
-
 NOW = datetime(2026, 5, 12, 12, 0, tzinfo=UTC)
 
 

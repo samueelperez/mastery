@@ -36,9 +36,9 @@ import polars as pl
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.binance_adapter import EXCHANGE_NAME
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
+from app.core.observability.metrics import risk_actions_total
 from app.indicators.core import atr as compute_atr_indicator
-from app.observability.metrics import risk_actions_total
 from app.storage.ohlcv_repo import fetch_range
 from app.storage.setup_repo import OpenSetupRow
 

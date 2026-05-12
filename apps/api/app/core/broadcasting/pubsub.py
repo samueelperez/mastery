@@ -14,7 +14,7 @@ import orjson
 import redis.asyncio as redis
 import structlog
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 log = structlog.get_logger(__name__)
 

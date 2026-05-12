@@ -28,7 +28,7 @@ from app.agent.tools.ohlcv import register_ohlcv_tools
 from app.agent.tools.perps_data import register_perps_data_tools
 from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
-from app.config import get_settings
+from app.core.config import get_settings
 
 # Mismo modelo que el main, pero con thinking más bajo y output cap menor.
 # Una review es estructuralmente más simple que un TradeIdea completo.

@@ -20,7 +20,7 @@ import asyncio
 import structlog
 from sqlalchemy import text
 
-from app.db import dispose_engine, init_engine, session_scope
+from app.core.db import dispose_engine, init_engine, session_scope
 
 log = structlog.get_logger(__name__)
 

@@ -24,9 +24,9 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
-from app.auth import require_user_id
-from app.config import get_settings
-from app.db import session_scope
+from app.core.auth import require_user_id
+from app.core.config import get_settings
+from app.core.db import session_scope
 from app.notifications import bind as bind_flow
 from app.notifications import telegram as tg
 from app.storage.notification_repo import (

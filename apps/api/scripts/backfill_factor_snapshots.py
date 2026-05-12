@@ -34,7 +34,7 @@ from app.agent.tools.confluence import (
     compute_score_components,
     confluence_map_to_factor_snapshot_deterministic,
 )
-from app.db import dispose_engine, init_engine, session_scope
+from app.core.db import dispose_engine, init_engine, session_scope
 
 log = structlog.get_logger(__name__)
 

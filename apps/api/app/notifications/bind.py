@@ -18,8 +18,8 @@ from __future__ import annotations
 import secrets
 import string
 
-from app.broadcasting.pubsub import get_client
-from app.config import get_settings
+from app.core.broadcasting.pubsub import get_client
+from app.core.config import get_settings
 
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
 

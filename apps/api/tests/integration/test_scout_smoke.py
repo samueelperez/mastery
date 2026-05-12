@@ -40,8 +40,8 @@ from app.agent.models import (
     TradeIdea,
     TradeIdeaTarget,
 )
-from app.db import session_scope
-from app.observability.metrics import (
+from app.core.db import session_scope
+from app.core.observability.metrics import (
     scout_accepted_total,
     setup_transitions_total,
 )

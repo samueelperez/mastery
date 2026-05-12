@@ -24,7 +24,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import session_dependency
+from app.core.db import session_dependency
 
 log = structlog.get_logger(__name__)
 

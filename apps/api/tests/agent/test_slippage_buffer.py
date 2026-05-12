@@ -7,7 +7,7 @@ These tests pin the threshold map + the buffer-aware ModelRetry path.
 
 from __future__ import annotations
 
-from app.config import get_settings
+from app.core.config import get_settings
 
 
 def test_btcusdt_buffer_default() -> None:

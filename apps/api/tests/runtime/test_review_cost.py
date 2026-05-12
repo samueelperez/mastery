@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.config import get_settings
+from app.core.config import get_settings
 from app.runtime.review_dispatcher import _extract_usage_and_cost
 
 

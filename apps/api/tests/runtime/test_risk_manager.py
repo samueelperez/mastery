@@ -24,7 +24,6 @@ from app.runtime.risk_manager import (
 )
 from app.storage.setup_repo import OpenSetupRow
 
-
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------

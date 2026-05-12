@@ -22,7 +22,6 @@ from sqlalchemy import text
 
 from app.storage.journal_repo import hybrid_search
 
-
 pytestmark = pytest.mark.asyncio
 
 

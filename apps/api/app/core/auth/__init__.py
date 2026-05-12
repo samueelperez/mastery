@@ -6,7 +6,7 @@ shared source of truth is a single Postgres database — there is no JWT, no
 auth proxy, no second copy of session state.
 """
 
-from app.auth.session import (
+from app.core.auth.session import (
     optional_user_id,
     require_user_id,
     resolve_user_id,

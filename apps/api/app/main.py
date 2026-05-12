@@ -18,9 +18,9 @@ from app.api.ohlcv import router as ohlcv_router
 from app.api.setups import router as setups_router
 from app.api.strategies import router as strategies_router
 from app.api.ws import router as ws_router
-from app.broadcasting.pubsub import close_client as close_valkey
-from app.config import get_settings
-from app.db import dispose_engine, init_engine
+from app.core.broadcasting.pubsub import close_client as close_valkey
+from app.core.config import get_settings
+from app.core.db import dispose_engine, init_engine
 from app.ingestion.live_klines import LiveIngestion
 from app.runtime.setup_runtime import SetupRuntime
 

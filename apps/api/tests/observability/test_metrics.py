@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from prometheus_client import generate_latest
 
-from app.observability.metrics import (
+from app.core.observability.metrics import (
     agent_invocation_seconds,
     agent_invocations_total,
     gap_fill_inserts_total,

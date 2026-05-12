@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import ccxt.pro as ccxtpro
 
-from app.data.normalizer import normalize_ccxt_ohlcv
-from app.data.types import OHLCVCandle
+from app.core.exchanges.normalizer import normalize_ccxt_ohlcv
+from app.core.exchanges.types import OHLCVCandle
 
 if TYPE_CHECKING:
     from ccxt.async_support.base.exchange import Exchange

@@ -20,14 +20,14 @@ import structlog
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 
 from app.alerts.runtime import alerts_channel
-from app.auth.session import (
+from app.core.auth.session import (
     SESSION_COOKIE_NAME,
     extract_session_token,
     lookup_user_id_for_token,
 )
-from app.broadcasting.pubsub import market_channel, reviews_channel, subscribe
-from app.data.binance_adapter import EXCHANGE_NAME
-from app.db import session_scope
+from app.core.broadcasting.pubsub import market_channel, reviews_channel, subscribe
+from app.core.db import session_scope
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 
 log = structlog.get_logger(__name__)
 router = APIRouter()

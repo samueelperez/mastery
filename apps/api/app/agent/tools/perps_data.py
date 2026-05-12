@@ -20,8 +20,8 @@ from pydantic_ai import Agent, RunContext
 
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
-from app.data.binance_adapter import EXCHANGE_NAME, BinanceAdapter
-from app.data.exchange_context import ExchangeContext
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME, BinanceAdapter
+from app.core.exchanges.exchange_context import ExchangeContext
 
 
 class FundingRateOut(BaseModel):

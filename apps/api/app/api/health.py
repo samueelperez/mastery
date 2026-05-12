@@ -4,9 +4,9 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from app.broadcasting.pubsub import ping as valkey_ping
-from app.config import get_settings
-from app.db import session_scope
+from app.core.broadcasting.pubsub import ping as valkey_ping
+from app.core.config import get_settings
+from app.core.db import session_scope
 
 router = APIRouter()
 

@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.binance_adapter import EXCHANGE_NAME
-from app.db import session_dependency
+from app.core.db import session_dependency
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.storage.ohlcv_repo import fetch_range
 
 router = APIRouter()

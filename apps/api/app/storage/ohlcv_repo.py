@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.tools._time import floor_to_timeframe
-from app.data.types import OHLCVCandle
+from app.core.exchanges.types import OHLCVCandle
 from app.storage.models import OHLCV
 
 

@@ -27,8 +27,8 @@ import httpx
 import structlog
 
 from app.agent.models import TradeIdea
-from app.config import get_settings
-from app.observability.metrics import telegram_sends_total
+from app.core.config import get_settings
+from app.core.observability.metrics import telegram_sends_total
 
 log = structlog.get_logger(__name__)
 

@@ -41,8 +41,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.agent import get_agent
 from app.agent.deps import AgentDeps
 from app.agent.models import TradeIdea
-from app.db import session_scope
-from app.observability.metrics import (
+from app.core.db import session_scope
+from app.core.observability.metrics import (
     agent_invocation_seconds,
     agent_invocations_total,
     scout_accepted_total,

@@ -26,10 +26,10 @@ from pydantic_ai import Agent, RunContext
 
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
-from app.broadcasting.pubsub import get_client
-from app.data.binance_adapter import BinanceAdapter
-from app.data.exchange_context import ExchangeContext
-from app.data.spot_adapter import BinanceSpotAdapter
+from app.core.broadcasting.pubsub import get_client
+from app.core.exchanges.binance_adapter import BinanceAdapter
+from app.core.exchanges.exchange_context import ExchangeContext
+from app.core.exchanges.spot_adapter import BinanceSpotAdapter
 
 # Cache TTLs. Current basis updates fast (60s ≈ a few perp ticks);
 # percentile bands move slowly (1h is plenty — 30d window barely shifts hourly).

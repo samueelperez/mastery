@@ -25,8 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.auth import require_user_id
-from app.db import session_scope
+from app.core.auth import require_user_id
+from app.core.db import session_scope
 
 log = structlog.get_logger("api.setups")
 router = APIRouter()

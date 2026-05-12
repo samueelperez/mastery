@@ -30,9 +30,9 @@ from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 from app.agent.agent import get_agent
 from app.agent.deps import AgentDeps
 from app.agent.tools.confluence import compute_score_components
-from app.auth import require_user_id
-from app.config import get_settings
-from app.db import session_scope
+from app.core.auth import require_user_id
+from app.core.config import get_settings
+from app.core.db import session_scope
 from app.storage.factor_stats_repo import get_top_factors_for_preamble
 from app.storage.post_mortem_repo import (
     RecurringLesson,

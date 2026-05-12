@@ -42,10 +42,10 @@ from app.agent.models import TriggerKind
 from app.alerts.dsl import RuleSpec
 from app.alerts.evaluator import build_snapshot, evaluate_rule
 from app.alerts.panel_service import compute_panel_for_specs
-from app.broadcasting.pubsub import market_channel, subscribe
-from app.config import get_settings
-from app.data.binance_adapter import EXCHANGE_NAME
-from app.db import session_scope
+from app.core.broadcasting.pubsub import market_channel, subscribe
+from app.core.config import get_settings
+from app.core.db import session_scope
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.ingestion.live_klines import get_watch_list
 from app.runtime.post_mortem_dispatcher import maybe_run_post_mortem
 from app.runtime.review_dispatcher import maybe_run_review
