@@ -153,6 +153,12 @@ async def _watch_trades_loop(adapter: BinanceAdapter, symbol: str) -> None:
         try:
             async for trade in adapter.watch_trades(symbol):
                 reconnect_attempts = 0
+                # ccxt occasionally emits synthetic trades with price=0/size=0
+                # (heartbeats, edge-case aggregations). The DB CHECK constraint
+                # would reject them and asyncpg's executemany is all-or-nothing,
+                # so even one bad row in a batch wipes the whole flush.
+                if trade.price <= 0 or trade.size <= 0:
+                    continue
                 buffer.append(trade)
                 now_m = loop.time()
                 if (
