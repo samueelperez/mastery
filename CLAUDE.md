@@ -17,7 +17,7 @@ Quickstart (root): `pnpm install && docker compose up -d` then run backend + fro
 - `uv run alembic upgrade head` — apply migrations (versions in `alembic/versions/`)
 - `uv run alembic revision -m "desc" --autogenerate` — create new migration
 - `uv run uvicorn app.main:app --reload --port 8000` — dev server
-- `uv run python -m app.ingestion.backfill --symbol BTCUSDT --tf 1m --years 2` — historical OHLCV backfill
+- `uv run python -m app.market.ohlcv.backfill --symbol BTCUSDT --tf 1m --years 2` — historical OHLCV backfill
 - `uv run pytest` — full suite (`pytest tests/indicators/test_core.py::test_ema_no_lookahead` for a single test). `asyncio_mode = "auto"` is set, so async tests don't need decorators.
 - `uv run ruff check .` / `uv run ruff format .` — lint/format
 - `uv run mypy app` — strict type-check
@@ -38,27 +38,27 @@ Quickstart (root): `pnpm install && docker compose up -d` then run backend + fro
 - `system_prompt.py` builds frozen ordered blocks (tools catalog → copilot rules → trader profile JSON). Do NOT interpolate timestamps or per-request data into the system prompt — it would invalidate Anthropic prompt caching. Per-request data goes in the user message.
 - Tools receive `RunContext[AgentDeps]`; `AgentDeps` carries a `session_factory` (use `async with deps.session_factory() as session`), a structlog logger, and `user_id`. All DB writes scope by `user_id`.
 
-### Review agent (`apps/api/app/agent/review_agent.py`)
-- A **second, independent** pydantic-AI agent for post-entry trade reviews — does NOT extend the main agent's `output_type` union. Same model (`anthropic/claude-sonnet-4.6`) but `thinking="low"` and `max_tokens=8000` because the schema is bounded; its own system prompt (`review_system_prompt.py`) is ~5× shorter for better cache hits, and only ~7 tools registered (ohlcv, indicators, structure, confluence, correlation, perps_data, volume_profile) — no journal/backtest tools.
-- Dispatch is centralized in `app/runtime/review_dispatcher.py::maybe_run_review`. The `SetupRuntime` calls it when a trigger fires (time offset, price move, approaching SL, entry hit, etc.). The dispatcher handles: atomic cooldown claim (`claim_review_slot` is a conditional UPDATE), global concurrency semaphore (`REVIEW_CONCURRENCY`), persistence (`setup_reviews` + `setup_events`), and pub/sub fan-out on channel `reviews:user:{user_id}`.
-- Reviews persist via `app/storage/review_repo.py`. Each review is rate-limited per setup (`REVIEW_MAX_REVIEWS_PER_SETUP`, default 12) with an exponential cooldown (`REVIEW_COOLDOWN_MIN_MINUTES`).
+### Review agent (`apps/api/app/reviewer/agent.py`)
+- A **second, independent** pydantic-AI agent for post-entry trade reviews — does NOT extend the main agent's `output_type` union. Same model (`anthropic/claude-sonnet-4.6`) but `thinking="low"` and `max_tokens=8000` because the schema is bounded; its own system prompt (`reviewer/system_prompt.py`) is ~5× shorter for better cache hits, and only ~7 tools registered (ohlcv, indicators, structure, confluence, correlation, perps_data, volume_profile) — no journal/backtest tools.
+- Dispatch is centralized in `app/reviewer/dispatcher.py::maybe_run_review`. The `SetupRuntime` calls it when a trigger fires (time offset, price move, approaching SL, entry hit, etc.). The dispatcher handles: atomic cooldown claim (`claim_review_slot` is a conditional UPDATE), global concurrency semaphore (`REVIEW_CONCURRENCY`), persistence (`setup_reviews` + `setup_events`), and pub/sub fan-out on channel `reviews:user:{user_id}`.
+- Reviews persist via `app/reviewer/repo.py`. Each review is rate-limited per setup (`REVIEW_MAX_REVIEWS_PER_SETUP`, default 12) with an exponential cooldown (`REVIEW_COOLDOWN_MIN_MINUTES`).
 
-### Chat transport (`apps/api/app/api/chat.py` ↔ `apps/web/components/chat/CopilotChat.tsx`)
+### Chat transport (`apps/api/app/agent/routes.py` ↔ `apps/web/components/chat/CopilotChat.tsx`)
 - Backend: `POST /chat` uses `VercelAIAdapter.dispatch_request` to stream the AI SDK Data Stream Protocol. The response sets `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`, `Connection: keep-alive` to prevent SSE buffering through Railway-edge / proxies.
 - Frontend: `@ai-sdk/react`'s `useChat` with `DefaultChatTransport`. The transport injects `Authorization: Bearer <token>` (read from localStorage) so chat works cross-domain. `expose_headers` includes `x-vercel-ai-ui-message-stream` for the AI SDK protocol detection.
 
 ### Auth (BetterAuth)
-- Single Postgres `session` table is the source of truth. Next.js writes via `apps/web/lib/auth/auth.ts` (`betterAuth` + `bearer()` plugin); FastAPI reads in `apps/api/app/auth/session.py`.
+- Single Postgres `session` table is the source of truth. Next.js writes via `apps/web/lib/core/auth/auth.ts` (`betterAuth` + `bearer()` plugin); FastAPI reads in `apps/api/app/core/auth/session.py`.
 - Two transports for the same token: cookie `better-auth.session_token` (same-origin) **or** `Authorization: Bearer <token>` (cross-domain Vercel↔Railway). FastAPI prefers the bearer header. The `<token>.<hmac>` suffix is stripped before the row lookup; HMAC is not re-verified in Python — the `expiresAt > now()` row check is the gate.
 - All API calls from the browser go through `apps/web/lib/api.ts::apiFetch`, which attaches the bearer token from `localStorage[mt.bearer_token]` and redirects to `/auth/login` on 401.
 - `apps/web/middleware.ts` redirects unauthenticated users to `/auth/login`. It only checks the cookie's presence (cheap) — actual auth happens in FastAPI.
 
 ### Data plane
-- **TimescaleDB hypertable** for OHLCV (migration `001`). Backfill via CCXT (`app/ingestion/backfill.py`); live via `LiveIngestion` started in the FastAPI lifespan (`app/main.py`). `WATCH_SYMBOLS` env (CSV) defines which USDT-M perps stream + persist; the frontend's `WATCH_SYMBOLS` constant in `apps/web/lib/store/active-symbol.ts` **must** match — symbols not in the backend list return empty OHLCV.
+- **TimescaleDB hypertable** for OHLCV (migration `001`). Backfill via CCXT (`app/market/ohlcv/backfill.py`); live via `LiveIngestion` started in the FastAPI lifespan (`app/main.py`). `WATCH_SYMBOLS` env (CSV) defines which USDT-M perps stream + persist; the frontend's `WATCH_SYMBOLS` constant in `apps/web/lib/store/active-symbol.ts` **must** match — symbols not in the backend list return empty OHLCV.
 - **pgvector** for journal embeddings (voyage-4-large, 1024 dim) — backfilled offline by `scripts/embed_backfill.py`.
-- **Valkey** (Redis-compatible) for pub/sub fan-out from backend → frontend WS clients (`app/broadcasting/pubsub.py`). We use `redis-py` against Valkey — wire-compatible.
+- **Valkey** (Redis-compatible) for pub/sub fan-out from backend → frontend WS clients (`app/core/broadcasting/pubsub.py`). We use `redis-py` against Valkey — wire-compatible.
 - **Async SQLAlchemy 2** with `asyncpg`. The `DATABASE_URL` field-validator auto-promotes `postgres://` / `postgresql://` to `postgresql+asyncpg://` so any hosted Postgres URL works without manual edits.
-- `app/db.py` exposes both `session_scope()` (caller-managed transaction; commits on success) and `session_dependency()` (FastAPI-style per-request session).
+- `app/core/db.py` exposes both `session_scope()` (caller-managed transaction; commits on success) and `session_dependency()` (FastAPI-style per-request session).
 
 ### Frontend state shape
 - **Active symbol/timeframe**: zustand store in `lib/store/active-symbol.ts`, persisted to localStorage. Sidebar + chart read; chat writes via tool `input.symbol` (`useSymbolBridge.ts`) — no regex parsing.
@@ -74,7 +74,7 @@ Quickstart (root): `pnpm install && docker compose up -d` then run backend + fro
 - The OHLCV+indicators panel-builder is factored into `app/alerts/panel_service.py` so both `AlertsRuntime` and `SetupRuntime` evaluate rules against an identically-shaped panel. The `_max_lookback` heuristic (Wilder smoothing × 2 + cross headroom, floored at 60) is the easy thing to break — see the docstring before tuning.
 
 ### Setups lifecycle (`F3.5` → F4)
-- `SetupRuntime` (lifespan-managed) tracks pending → active → closed transitions on candle close (`app/runtime/setup_runtime.py`). When the agent emits a `TradeIdea`, `validators.py` calls `insert_setup_from_idea` to materialize it; the runtime watches price and updates `setups` + `setup_events`.
+- `SetupRuntime` (lifespan-managed) tracks pending → active → closed transitions on candle close (`app/setups/runtime.py`). When the agent emits a `TradeIdea`, `validators.py` calls `insert_setup_from_idea` to materialize it; the runtime watches price and updates `setups` + `setup_events`.
 - **F4 invalidation (migration 008)**: pending setups carry `invalidation_conditions jsonb` (a list of `RuleSpec`-shaped DSL conditions reusing `app.alerts.dsl`) and an optional wall-clock `expires_at`. The first to fire transitions `pending → cancelled` with `setup_events.event = 'invalidated'` (distinct from `'cancelled'` which is a manual user-cancel). **Naming gotcha**: migration 008 renamed `journal_trades.invalidation_px` → `stop_loss_px`; the corresponding `TradeIdea.invalidation` field became `TradeIdea.stop_loss`. The word "invalidation" is now reserved for the pre-entry concept.
 - **F5 thesis persistence (migration 010)**: `journal_trades` now stores the full `summary_es_full` (verbatim copy, ≤1100 chars), plus `confluences` and `scenarios` as JSONB. This lets the review agent judge "does the thesis still hold?" without re-deriving via tools. `summary_text` (300-char truncation) stays for listings.
 
