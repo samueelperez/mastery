@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from scipy.stats import beta as beta_dist
 
-from app.storage.factor_stats_repo import (
+from app.backtest.factor_stats_repo import (
     PRIOR_ALPHA,
     PRIOR_BETA,
     _posterior_stats,

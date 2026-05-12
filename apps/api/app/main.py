@@ -8,13 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.alerts.routes import router as alerts_router
 from app.alerts.runtime import AlertsRuntime
-from app.api.backtests import router as backtests_router
 from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.api.metrics import router as metrics_router
 from app.api.notifications import router as notifications_router
 from app.api.setups import router as setups_router
-from app.api.strategies import router as strategies_router
+from app.backtest.routes_backtests import router as backtests_router
+from app.backtest.routes_strategies import router as strategies_router
 from app.core.broadcasting.pubsub import close_client as close_valkey
 from app.core.config import get_settings
 from app.core.db import dispose_engine, init_engine

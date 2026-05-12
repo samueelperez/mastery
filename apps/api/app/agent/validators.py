@@ -35,7 +35,7 @@ from pydantic_ai.messages import (
 
 from app.agent.deps import AgentDeps
 from app.agent.models import BiasAlert, BriefAnalysis, ToolCitation, TradeIdea
-from app.storage.factor_stats_repo import evaluate_factor_gate
+from app.backtest.factor_stats_repo import evaluate_factor_gate
 from app.storage.setup_repo import insert_setup_from_idea
 
 # Pattern for tool-name leakage in user-facing prose. Cualquier referencia a

@@ -22,8 +22,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.models import TradeIdea
+from app.backtest.factor_stats_repo import PRESENT_THRESHOLD
 from app.core.observability.metrics import setup_transitions_total
-from app.storage.factor_stats_repo import PRESENT_THRESHOLD
 
 SetupStatus = Literal["pending", "active", "closed", "cancelled"]
 SetupEventKind = Literal[

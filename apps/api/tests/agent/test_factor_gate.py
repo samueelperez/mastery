@@ -40,7 +40,7 @@ from app.agent.models import (
     TradeIdea,
     TradeIdeaTarget,
 )
-from app.storage.factor_stats_repo import (
+from app.backtest.factor_stats_repo import (
     FACTOR_GATE_HARD_LCB_THRESHOLD,
     FACTOR_GATE_HARD_MIN_N,
     FACTOR_GATE_SOFT_LCB_THRESHOLD,

@@ -21,7 +21,7 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from app.storage.factor_stats_repo import get_recent_lessons_for_factors
+from app.backtest.factor_stats_repo import get_recent_lessons_for_factors
 
 pytestmark = pytest.mark.asyncio
 

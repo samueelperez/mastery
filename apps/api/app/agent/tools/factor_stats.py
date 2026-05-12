@@ -21,14 +21,14 @@ from pydantic_ai import Agent, RunContext
 
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
-from app.storage.factor_stats_repo import (
+from app.backtest.factor_stats_repo import (
     PRIOR_ALPHA,
     PRIOR_BETA,
 )
-from app.storage.factor_stats_repo import (
+from app.backtest.factor_stats_repo import (
     get_factor_hit_rates as _repo_get_factor_hit_rates,
 )
-from app.storage.factor_stats_repo import (
+from app.backtest.factor_stats_repo import (
     get_recent_lessons_for_factors as _repo_get_recent_lessons_for_factors,
 )
 
