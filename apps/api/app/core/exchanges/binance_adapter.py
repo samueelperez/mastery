@@ -21,8 +21,8 @@ import ccxt.pro as ccxtpro
 import structlog
 
 from app.core.exchanges.exchange_context import ExchangeContext
-from app.core.exchanges.normalizer import normalize_ccxt_ohlcv
-from app.core.exchanges.types import OHLCVCandle
+from app.core.exchanges.normalizer import normalize_ccxt_ohlcv, normalize_ccxt_trade
+from app.core.exchanges.types import OHLCVCandle, Trade
 
 if TYPE_CHECKING:
     from ccxt.async_support.base.exchange import Exchange
@@ -47,8 +47,8 @@ class BinanceAdapter:
         api_key: str | None = None,
         api_secret: str | None = None,
     ) -> None:
-        if ctx.needs_api_key and (api_key is None or api_secret is None):
-            raise ValueError(f"Context {ctx.value} requires api_key + api_secret")
+        if ctx.needs_api_key and not (api_key and api_secret):
+            raise ValueError(f"Context {ctx.value} requires non-empty api_key + api_secret")
 
         self.ctx = ctx
         # ccxt typing is loose; we accept the dict params as-is.
@@ -111,6 +111,34 @@ class BinanceAdapter:
             yield normalized[-1]
 
     # -------------------------------------------------------------------------
+    # WS: live trades (used by liquidation Provider A — Cerebro 1).
+    # -------------------------------------------------------------------------
+
+    async def watch_trades(
+        self,
+        symbol: str,
+    ) -> AsyncIterator[Trade]:
+        """Async generator yielding every aggressor-tagged trade on WS push.
+
+        Each ccxt.pro `watch_trades` poll returns a *batch* of trades since
+        the previous push; we flatten and yield one Trade at a time so the
+        ingestion loop can buffer at its own cadence.
+
+        `symbol` follows the watch_list convention (e.g. 'BTCUSDT'). We pass
+        it straight to ccxt — ccxt.pro.binanceusdm accepts this form.
+        """
+        while True:
+            rows = await self.client.watch_trades(symbol)
+            if not rows:
+                continue
+            for row in rows:
+                # ccxt returns 'symbol' as 'BTC/USDT:USDT' in some cases;
+                # override with the caller's internal form so DB rows are
+                # consistent regardless of ccxt's normalization choices.
+                row_for_normalize = {**row, "symbol": symbol}
+                yield normalize_ccxt_trade(row_for_normalize, exchange=EXCHANGE_NAME)
+
+    # -------------------------------------------------------------------------
     # REST: funding rate (perpetuals).
     # -------------------------------------------------------------------------
 
@@ -135,9 +163,7 @@ class BinanceAdapter:
         Útil para calcular funding cumulativo: 7 días = 21 pagos. Si la suma
         es positiva, los longs pagan a los shorts (alcista crowded).
         """
-        return await self.client.fetch_funding_rate_history(
-            symbol, since=since_ms, limit=limit
-        )
+        return await self.client.fetch_funding_rate_history(symbol, since=since_ms, limit=limit)
 
     # -------------------------------------------------------------------------
     # REST: open interest (perpetuals).

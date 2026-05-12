@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
-from app.core.exchanges.types import OHLCVCandle
+from app.core.exchanges.types import OHLCVCandle, Trade
 
 # Map CCXT timeframe strings to a (count, unit) pair so we can compute
 # the kline's expected close time (used to infer is_closed).
@@ -28,6 +28,43 @@ def timeframe_delta(timeframe: str) -> timedelta:
         return _TIMEFRAME_DELTAS[timeframe]
     except KeyError as exc:
         raise ValueError(f"Unsupported timeframe: {timeframe}") from exc
+
+
+def normalize_ccxt_trade(
+    row: dict,
+    *,
+    exchange: str,
+) -> Trade:
+    """Convert a single ccxt trade dict to our Trade model.
+
+    ccxt trade fields used:
+        - timestamp: ms since epoch
+        - symbol: e.g. 'BTC/USDT:USDT' for USDM perp; we keep the symbol
+          the caller passed to watch_trades (no slash) by overriding.
+        - price, amount: floats
+        - side: 'buy' or 'sell' (aggressor / taker side)
+        - id: trade id (optional; some exchanges omit)
+
+    Caller must pass `symbol` if it wants the internal form (e.g.
+    'BTCUSDT') rather than ccxt's slashed form.
+    """
+    ts_ms = row["timestamp"]
+    raw_side = row["side"]
+    if raw_side == "buy":
+        side = "B"
+    elif raw_side == "sell":
+        side = "S"
+    else:
+        raise ValueError(f"Unexpected trade side from ccxt: {raw_side!r}")
+    return Trade(
+        exchange=exchange,
+        symbol=row["symbol"],
+        ts=datetime.fromtimestamp(ts_ms / 1000, tz=UTC),
+        price=float(row["price"]),
+        size=float(row["amount"]),
+        side=side,
+        trade_id=str(row["id"]) if row.get("id") is not None else None,
+    )
 
 
 def normalize_ccxt_ohlcv(

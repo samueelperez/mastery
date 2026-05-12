@@ -16,15 +16,17 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 
-from app.agent.tools._time import floor_to_timeframe
 from app.core.broadcasting.pubsub import market_channel, publish_json
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.core.exchanges.exchange_context import ExchangeContext
 from app.core.exchanges.normalizer import timeframe_delta
+from app.core.exchanges.types import Trade
 from app.core.observability.metrics import gap_fill_inserts_total, runtime_streams_alive
+from app.core.time import floor_to_timeframe
 from app.market.ohlcv.repo import bulk_upsert, existing_ts_in_window, last_ts, upsert_one
+from app.market.trades.repo import bulk_insert as trades_bulk_insert
 
 log = structlog.get_logger(__name__)
 
@@ -64,6 +66,10 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
     channel = market_channel(exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe)
     log.info("ingest.watch.start", symbol=symbol, timeframe=timeframe, channel=channel)
     last_persisted_ts: object = None
+    # Exponential backoff (audit fix 2026-05): antes 2s fijo → si Binance
+    # tira un 1006 por mantenimiento (10-15min), 300+ intentos × 4 símbolos
+    # × 5 TFs = 6000 reconnects con riesgo de IP ban. Cap a 60s + jitter.
+    reconnect_attempts = 0
 
     while True:
         try:
@@ -75,10 +81,10 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
             # `phase='reconnect'` distingue en métricas de la pasada de startup
             # (cualquier insert >0 mid-runtime indica WS inestable).
             with contextlib.suppress(Exception):
-                await _fill_gap(
-                    adapter, symbol, timeframe, phase="reconnect"
-                )
+                await _fill_gap(adapter, symbol, timeframe, phase="reconnect")
             async for candle in adapter.watch_ohlcv(symbol, timeframe):
+                # Cada candle recibido = WS sano → reset backoff.
+                reconnect_attempts = 0
                 # Always publish: subscribers get every tick of the forming candle.
                 await publish_json(
                     channel,
@@ -108,16 +114,80 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
             log.info("ingest.watch.cancelled", symbol=symbol, timeframe=timeframe)
             raise
         except Exception as exc:
+            # Exponential backoff con jitter (audit fix 2026-05). Base 2s,
+            # cap 60s; resetea cuando entra una vela exitosa.
+            import random
+
+            reconnect_attempts += 1
+            delay = min(2.0 * (2 ** (reconnect_attempts - 1)), 60.0) + random.uniform(0, 1.5)
             log.warning(
                 "ingest.watch.error",
                 symbol=symbol,
                 timeframe=timeframe,
                 error=str(exc),
+                attempt=reconnect_attempts,
+                next_retry_s=round(delay, 2),
             )
-            await asyncio.sleep(2.0)  # backoff before reconnect
+            await asyncio.sleep(delay)
 
 
-def _group_consecutive(timestamps: list[datetime], delta: timedelta) -> list[tuple[datetime, datetime]]:
+# --------------------------------------------------------------------------
+# Trades WS loop — feeds liquidation Provider A (Cerebro 1).
+# --------------------------------------------------------------------------
+# Buffered flush: trades come in bursts (50-200 trades/sec on BTC). Inserting
+# one row at a time would saturate the DB; we batch up to N rows or every M
+# seconds, whichever comes first. The flush on cancel ensures we don't drop
+# the in-memory tail on graceful shutdown.
+TRADES_FLUSH_THRESHOLD = 500
+TRADES_FLUSH_INTERVAL_S = 1.0
+
+
+async def _watch_trades_loop(adapter: BinanceAdapter, symbol: str) -> None:
+    log.info("ingest.trades.start", symbol=symbol)
+    buffer: list[Trade] = []
+    loop = asyncio.get_running_loop()
+    last_flush = loop.time()
+    reconnect_attempts = 0
+
+    while True:
+        try:
+            async for trade in adapter.watch_trades(symbol):
+                reconnect_attempts = 0
+                buffer.append(trade)
+                now_m = loop.time()
+                if (
+                    len(buffer) >= TRADES_FLUSH_THRESHOLD
+                    or (now_m - last_flush) >= TRADES_FLUSH_INTERVAL_S
+                ):
+                    async with session_scope() as session:
+                        await trades_bulk_insert(session, buffer)
+                    buffer.clear()
+                    last_flush = now_m
+        except asyncio.CancelledError:
+            log.info("ingest.trades.cancelled", symbol=symbol, pending=len(buffer))
+            if buffer:
+                with contextlib.suppress(Exception):
+                    async with session_scope() as session:
+                        await trades_bulk_insert(session, buffer)
+            raise
+        except Exception as exc:
+            import random
+
+            reconnect_attempts += 1
+            delay = min(2.0 * (2 ** (reconnect_attempts - 1)), 60.0) + random.uniform(0, 1.5)
+            log.warning(
+                "ingest.trades.error",
+                symbol=symbol,
+                error=str(exc),
+                attempt=reconnect_attempts,
+                next_retry_s=round(delay, 2),
+            )
+            await asyncio.sleep(delay)
+
+
+def _group_consecutive(
+    timestamps: list[datetime], delta: timedelta
+) -> list[tuple[datetime, datetime]]:
     """Agrupa `timestamps` ordenados en rangos `[start, end]` donde cada par
     consecutivo está separado exactamente por `delta`. Devuelve tuplas (start, end).
 
@@ -166,9 +236,7 @@ async def _fill_gap(
     floor_now = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
 
     async with session_scope() as session:
-        latest = await last_ts(
-            session, exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe
-        )
+        latest = await last_ts(session, exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe)
 
     # Empty series — seed flow.
     if latest is None:
@@ -204,9 +272,9 @@ async def _fill_gap(
             inserted=inserted,
         )
         if inserted > 0:
-            gap_fill_inserts_total.labels(
-                symbol=symbol, timeframe=timeframe, phase=phase
-            ).inc(inserted)
+            gap_fill_inserts_total.labels(symbol=symbol, timeframe=timeframe, phase=phase).inc(
+                inserted
+            )
         return inserted
 
     # Non-empty series — find ALL missing ts in the lookback window.
@@ -273,9 +341,7 @@ async def _fill_gap(
         inserted=inserted,
     )
     if inserted > 0:
-        gap_fill_inserts_total.labels(
-            symbol=symbol, timeframe=timeframe, phase=phase
-        ).inc(inserted)
+        gap_fill_inserts_total.labels(symbol=symbol, timeframe=timeframe, phase=phase).inc(inserted)
     return inserted
 
 
@@ -317,8 +383,20 @@ class LiveIngestion:
                 name=f"ingest:{symbol}:{tf}",
             )
             self._tasks.append(t)
+        # One trades stream per symbol (not per timeframe). Feeds Cerebro 1.
+        for symbol in symbols:
+            t = asyncio.create_task(
+                _watch_trades_loop(self._adapter, symbol),
+                name=f"ingest:trades:{symbol}",
+            )
+            self._tasks.append(t)
         runtime_streams_alive.set(len(self._tasks))
-        log.info("ingest.start", n_streams=len(self._tasks))
+        log.info(
+            "ingest.start",
+            n_streams=len(self._tasks),
+            n_ohlcv=len(self._watch_list),
+            n_trades=len(symbols),
+        )
 
     async def stop(self) -> None:
         for t in self._tasks:
