@@ -23,6 +23,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_user_id
 from app.db import session_dependency
+from app.storage.factor_stats_repo import get_holdout_performance_summary
+from app.storage.post_mortem_repo import (
+    get_post_mortem_by_trade_id,
+    list_post_mortems,
+)
+from app.storage.review_repo import (
+    get_review as get_review_row,
+)
+from app.storage.review_repo import (
+    list_reviews_for_setup,
+)
 from app.storage.setup_repo import (
     cancel_setup,
     count_setups_by_status,
@@ -128,6 +139,16 @@ class SetupTargetDTO(BaseModel):
     hit_at: datetime | None = None
 
 
+class InvalidationConditionDTO(BaseModel):
+    """Mirror del Pydantic model en `app.agent.models.InvalidationCondition`.
+    El `spec` se pasa raw para la UI (no se reparsea aquí; el RuleSpec ya fue
+    validado por el agent al emitir el TradeIdea)."""
+
+    spec: dict[str, Any]
+    rationale: str
+    citations: list[dict[str, Any]] = []
+
+
 class SetupListRow(BaseModel):
     id: str
     user_id: str
@@ -138,7 +159,7 @@ class SetupListRow(BaseModel):
     status: str
     source: str
     entry_px: float
-    invalidation_px: float | None
+    stop_loss_px: float | None
     exit_px: float | None
     size: float
     r_multiple: float | None
@@ -146,10 +167,13 @@ class SetupListRow(BaseModel):
     regime: str
     confidence: str | None
     targets: list[SetupTargetDTO]
+    invalidation_conditions: list[InvalidationConditionDTO] = []
+    expires_at: datetime | None = None
     mistakes: str | None
     proposed_at: datetime | None
     entry_hit_at: datetime | None
     closed_at: datetime | None
+    invalidated_at: datetime | None = None
     created_at: datetime
 
 
@@ -163,9 +187,12 @@ class SetupEventRow(BaseModel):
 
 class SetupDetail(SetupListRow):
     summary_text: str
+    summary_es_full: str | None = None
     news_24h: dict[str, Any]
     features: dict[str, Any]
     mistakes: str | None
+    expires_at_rationale: str | None = None
+    expires_at_citations: list[dict[str, Any]] | None = None
     updated_at: datetime
     events: list[SetupEventRow]
 
@@ -236,6 +263,60 @@ async def get_journal_setup(
     return SetupDetail(**row)
 
 
+class TradeReviewRow(BaseModel):
+    id: str
+    trade_id: str
+    user_id: str
+    trigger_kind: str
+    trigger_payload: dict[str, Any]
+    current_state: str
+    recommendation: str
+    summary: str
+    rationale: str
+    citations: list[dict[str, Any]]
+    price_at_review: float
+    model_id: str
+    usage_tokens: dict[str, Any] | None
+    cost_usd: float | None
+    prompt_version: str | None
+    created_at: datetime
+
+
+@router.get(
+    "/journal/setups/{trade_id}/reviews",
+    response_model=list[TradeReviewRow],
+    tags=["journal"],
+)
+async def list_setup_reviews_endpoint(
+    trade_id: str,
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[TradeReviewRow]:
+    rows = await list_reviews_for_setup(
+        session, trade_id=trade_id, user_id=user_id, limit=limit
+    )
+    return [TradeReviewRow(**r) for r in rows]
+
+
+@router.get(
+    "/journal/reviews/{review_id}",
+    response_model=TradeReviewRow,
+    tags=["journal"],
+)
+async def get_journal_review(
+    review_id: str,
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> TradeReviewRow:
+    row = await get_review_row(session, review_id=review_id, user_id=user_id)
+    if not row:
+        raise HTTPException(
+            status_code=404, detail=f"review {review_id} not found"
+        )
+    return TradeReviewRow(**row)
+
+
 @router.post(
     "/journal/setups/{trade_id}/cancel",
     response_model=dict,
@@ -284,3 +365,202 @@ async def list_strategy_winrate(
 ) -> list[StrategyWinrateRow]:
     rows = await winrate_by_setup_tag(session, user_id=user_id, min_n=min_n)
     return [StrategyWinrateRow(**r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# F5.5 — post-mortems endpoints
+# ---------------------------------------------------------------------------
+
+
+class PostMortemResponse(BaseModel):
+    id: str
+    trade_id: str
+    user_id: str
+    outcome: str
+    r_multiple: float
+    exit_reason: str
+    verdict: str
+    confidence_calibration: str
+    factor_verdicts: dict[str, Any]
+    lesson_es: str
+    summary_es: str
+    counterfactual_es: str | None
+    entry_vs_exit_delta: dict[str, Any] | None
+    citations: list[dict[str, Any]]
+    model_id: str
+    usage_tokens: dict[str, Any] | None
+    cost_usd: float | None
+    prompt_version: str | None
+    created_at: datetime
+
+
+@router.get(
+    "/journal/setups/{trade_id}/post-mortem",
+    response_model=PostMortemResponse,
+    tags=["journal"],
+)
+async def get_setup_post_mortem(
+    trade_id: str,
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> PostMortemResponse:
+    """Post-mortem único asociado a un trade cerrado. 404 si todavía no
+    se ejecutó (feature flag off, dispatcher pendiente o ID inválido)."""
+    row = await get_post_mortem_by_trade_id(
+        session, trade_id=trade_id, user_id=user_id
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="post_mortem_not_found")
+    return PostMortemResponse(**row)
+
+
+@router.get(
+    "/journal/post-mortems",
+    response_model=list[PostMortemResponse],
+    tags=["journal"],
+)
+async def list_setup_post_mortems(
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+    outcome: Annotated[
+        Literal["win", "loss", "breakeven", "partial_win"] | None,
+        Query(description="Filtrar por outcome bucket."),
+    ] = None,
+    verdict: Annotated[
+        Literal["thesis_held", "thesis_broken", "execution_error", "noise"] | None,
+        Query(description="Filtrar por verdict del agente."),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[PostMortemResponse]:
+    rows = await list_post_mortems(
+        session, user_id=user_id, outcome=outcome, verdict=verdict, limit=limit
+    )
+    return [PostMortemResponse(**r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# F5.5 — holdout performance + MFE/MAE stats (anti-overfit monitoring)
+# ---------------------------------------------------------------------------
+
+
+class HoldoutBucket(BaseModel):
+    n: int
+    win_rate: float | None
+    avg_r: float | None
+
+
+class HoldoutPerformanceResponse(BaseModel):
+    in_sample: HoldoutBucket
+    holdout: HoldoutBucket
+    delta_pp: float | None
+    drift_warning: bool
+
+
+@router.get(
+    "/journal/holdout-performance",
+    response_model=HoldoutPerformanceResponse,
+    tags=["journal", "monitoring"],
+)
+async def get_holdout_performance(
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> HoldoutPerformanceResponse:
+    """Comparativa in-sample vs holdout para detectar overfit del feedback
+    loop. Si `|delta_pp| > 8` con muestras razonables (>= 20 en cada lado),
+    el sistema está aprendiendo demasiado de su propio histórico."""
+    summary = await get_holdout_performance_summary(session, user_id=user_id)
+    in_sample = summary["in_sample"]
+    holdout = summary["holdout"]
+    delta_pp = summary["delta_pp"]
+    drift_warning = bool(
+        delta_pp is not None
+        and abs(delta_pp) > 8.0
+        and in_sample.get("n", 0) >= 20
+        and holdout.get("n", 0) >= 20
+    )
+    return HoldoutPerformanceResponse(
+        in_sample=HoldoutBucket(**in_sample),
+        holdout=HoldoutBucket(**holdout),
+        delta_pp=delta_pp,
+        drift_warning=drift_warning,
+    )
+
+
+class MfeMaeStats(BaseModel):
+    n: int
+    mfe_p25: float | None
+    mfe_p50: float | None
+    mfe_p75: float | None
+    mae_p25: float | None
+    mae_p50: float | None
+    mae_p75: float | None
+    exit_efficiency_p50: float | None
+
+
+@router.get(
+    "/journal/mfe-mae-stats",
+    response_model=MfeMaeStats,
+    tags=["journal", "monitoring"],
+)
+async def get_mfe_mae_stats(
+    session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
+    lookback_days: Annotated[int, Query(ge=7, le=730)] = 180,
+) -> MfeMaeStats:
+    """Percentiles de MFE/MAE en R-units. p75 alto de MFE con r_multiple
+    bajo = exits prematuros (sales antes de capturar el máximo). p25 muy
+    bajo de MAE = SL demasiado ajustado (wicks te están barriendo)."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*) AS n,
+                    percentile_cont(0.25) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mfe_r')::numeric
+                    ) AS mfe_p25,
+                    percentile_cont(0.50) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mfe_r')::numeric
+                    ) AS mfe_p50,
+                    percentile_cont(0.75) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mfe_r')::numeric
+                    ) AS mfe_p75,
+                    percentile_cont(0.25) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mae_r')::numeric
+                    ) AS mae_p25,
+                    percentile_cont(0.50) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mae_r')::numeric
+                    ) AS mae_p50,
+                    percentile_cont(0.75) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'mae_r')::numeric
+                    ) AS mae_p75,
+                    percentile_cont(0.50) WITHIN GROUP (
+                        ORDER BY (mfe_mae->>'exit_efficiency_pct')::numeric
+                    ) FILTER (
+                        WHERE (mfe_mae->>'exit_efficiency_pct') IS NOT NULL
+                    ) AS efficiency_p50
+                FROM journal_trades
+                WHERE user_id = :uid
+                  AND status = 'closed'
+                  AND source = 'agent_proposal'
+                  AND mfe_mae IS NOT NULL
+                  AND closed_at >= now() - make_interval(days => :lb)
+                """
+            ),
+            {"uid": user_id, "lb": lookback_days},
+        )
+    ).mappings().one()
+    return MfeMaeStats(
+        n=int(row["n"] or 0),
+        mfe_p25=float(row["mfe_p25"]) if row["mfe_p25"] is not None else None,
+        mfe_p50=float(row["mfe_p50"]) if row["mfe_p50"] is not None else None,
+        mfe_p75=float(row["mfe_p75"]) if row["mfe_p75"] is not None else None,
+        mae_p25=float(row["mae_p25"]) if row["mae_p25"] is not None else None,
+        mae_p50=float(row["mae_p50"]) if row["mae_p50"] is not None else None,
+        mae_p75=float(row["mae_p75"]) if row["mae_p75"] is not None else None,
+        exit_efficiency_p50=(
+            float(row["efficiency_p50"])
+            if row["efficiency_p50"] is not None
+            else None
+        ),
+    )

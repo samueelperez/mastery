@@ -200,8 +200,20 @@ async def _bias_for_tf(
     exchange: str,
     symbol: str,
     tf: str,
+    until: datetime | None = None,
 ) -> tuple[TimeframeBias, datetime, list[str]]:
-    cutoff = floor_to_timeframe(datetime.now(tz=UTC), tf)
+    """Calcula el bias multifactor para un (symbol, tf).
+
+    `until`: si None, usa floor_to_timeframe(now, tf) (= próxima vela
+    cerrada). Si se pasa, calcula el bias en ese instante histórico —
+    permite reproducir el ScoreComponents que existía cuando un trade
+    fue propuesto o cuando cerró (entry_vs_exit_delta del post-mortem,
+    backfill retroactivo).
+    """
+    if until is None:
+        cutoff = floor_to_timeframe(datetime.now(tz=UTC), tf)
+    else:
+        cutoff = floor_to_timeframe(until, tf)
     async with session_factory() as session:
         df = await compute_panel(
             session,
@@ -382,3 +394,81 @@ def register_confluence_tools(agent: Agent[AgentDeps, object]) -> None:
                 warnings=all_warnings,
             ),
         )
+
+
+# ============================================================================
+# Helpers públicos reusables (F5.5 post-mortem)
+# ============================================================================
+
+
+async def compute_score_components(
+    *,
+    session_factory: SessionFactory,
+    exchange: str,
+    symbol: str,
+    timeframes: list[str] | None = None,
+    until: datetime | None = None,
+) -> ConfluenceMap:
+    """Reusable de `get_multi_tf_confluence` sin envelope ni RunContext.
+
+    Llamado desde el validator (para construir `factor_snapshot` al crear
+    el setup), desde el post_mortem_dispatcher (para `entry_vs_exit_delta`)
+    y desde el script de backfill. NO se registra como tool — el agente
+    debe seguir llamando `get_multi_tf_confluence` con su envelope, no este
+    helper crudo.
+    """
+    symbol = symbol.upper()
+    if timeframes is None:
+        timeframes = ["15m", "1h", "4h", "1d"]
+    results = await asyncio.gather(
+        *[
+            _bias_for_tf(
+                session_factory=session_factory,
+                exchange=exchange,
+                symbol=symbol,
+                tf=tf,
+                until=until,
+            )
+            for tf in timeframes
+        ]
+    )
+    biases = [r[0] for r in results]
+    bull = sum(1 for b in biases if b.bias == "bull")
+    bear = sum(1 for b in biases if b.bias == "bear")
+    if bull > bear:
+        agg = "bull"
+        agreement = 100.0 * bull / len(biases)
+    elif bear > bull:
+        agg = "bear"
+        agreement = 100.0 * bear / len(biases)
+    else:
+        agg = "range"
+        agreement = 100.0 * (len(biases) - bull - bear) / len(biases)
+    return ConfluenceMap(
+        by_tf=biases, aggregate_bias=agg, aggregate_agreement_pct=agreement
+    )
+
+
+def confluence_map_to_factor_snapshot_deterministic(
+    cmap: ConfluenceMap,
+) -> dict[str, object]:
+    """Empaqueta ConfluenceMap al shape esperado por `journal_trades.factor_
+    snapshot.deterministic`. Cada factor_name del scorer (ema_stack, regime,
+    rsi, volume, distance_atr) se persiste por timeframe como valor float;
+    el `score_total` también va incluido (skip en fan-out a factor_outcomes).
+    """
+    by_tf: dict[str, dict[str, float]] = {}
+    for b in cmap.by_tf:
+        by_tf[b.timeframe] = {
+            "ema_stack": b.score_components.ema_stack,
+            "regime": b.score_components.regime,
+            "rsi": b.score_components.rsi,
+            "volume": b.score_components.volume,
+            "distance_atr": b.score_components.distance_atr,
+            "score_total": b.score_total,
+        }
+    return {
+        "by_tf": by_tf,
+        "aggregate_bias": cmap.aggregate_bias,
+        "aggregate_agreement_pct": cmap.aggregate_agreement_pct,
+    }

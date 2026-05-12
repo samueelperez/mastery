@@ -51,8 +51,17 @@ export interface Scenario {
   probability_pct: number
   description: string
   entry?: number | null
-  invalidation?: number | null
+  stop_loss?: number | null
   target?: number | null
+}
+
+/** Una `RuleSpec` (mismo shape que `create_alert.spec`) más metadata humana.
+ *  El backend valida el shape vía `app.alerts.dsl.RuleSpec` antes de persistir;
+ *  la UI puede tratar `spec` como opaco para mostrar (al menos en v1). */
+export interface InvalidationCondition {
+  spec: Record<string, unknown>
+  rationale: string
+  citations: ToolCitation[]
 }
 
 export interface TradeIdea {
@@ -64,10 +73,20 @@ export interface TradeIdea {
   entry: number | null
   entry_rationale: string | null
   entry_citations: ToolCitation[]
-  invalidation: number | null
-  invalidation_rationale: string | null
-  invalidation_citations: ToolCitation[]
+  stop_loss: number | null
+  stop_loss_rationale: string | null
+  stop_loss_citations: ToolCitation[]
   targets: TradeIdeaTarget[]
+  /** 0..N condiciones (RuleSpec + rationale + citations) que cancelan el
+   *  setup mientras está PENDING. OR-combined globalmente: la primera que
+   *  dispare → status `cancelled` con event `invalidated`. */
+  invalidation_conditions?: InvalidationCondition[]
+  /** Wall-clock expiry opcional. Si el momento pasa sin entry hit, el setup
+   *  pasa a `cancelled` con event `invalidated`. ISO-8601 UTC. Solo cuando
+   *  el agente identifica una tesis time-sensitive — NUNCA por defecto. */
+  expires_at?: string | null
+  expires_at_rationale?: string | null
+  expires_at_citations?: ToolCitation[]
   /** Mapa de decisión: 2-3 ramas plausibles con probabilidad. Vacío en
    *  no_trade puro o cuando el modelo no genera scenarios. */
   scenarios?: Scenario[]

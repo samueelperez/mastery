@@ -168,7 +168,7 @@ def register_structure_tools(agent: Agent[AgentDeps, object]) -> None:
         ≥2 sólo si quieres override manual (raro). El elegido se reporta en
         `pivot_strength_used`.
 
-        Use to anchor entry/invalidation/target prices on logical levels.
+        Use to anchor entry/stop_loss/target prices on logical levels.
         """
         symbol = symbol.upper()
         cutoff = floor_to_timeframe(datetime.now(tz=UTC), timeframe)

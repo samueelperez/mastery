@@ -21,6 +21,8 @@ Violations raise `ModelRetry` so the agent re-attempts.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic_ai import Agent, ModelRetry, RunContext
@@ -33,8 +35,8 @@ from pydantic_ai.messages import (
 
 from app.agent.deps import AgentDeps
 from app.agent.models import BiasAlert, BriefAnalysis, ToolCitation, TradeIdea
+from app.storage.factor_stats_repo import evaluate_factor_gate
 from app.storage.setup_repo import insert_setup_from_idea
-
 
 # Pattern for tool-name leakage in user-facing prose. Cualquier referencia a
 # `get_*` (nombres de las tools registradas) en verdict/catalyst/risk de un
@@ -116,6 +118,183 @@ def _collect_returned_handles(
     return handles
 
 
+# Snapshot numeric verification ----------------------------------------------
+#
+# The citation gate (`_check`) proves the tool was called. The snapshot
+# numeric gate proves the cited number came from that tool's actual output.
+# Together they prevent both "cited a tool that wasn't called" and "called
+# the right tool but quoted an invented number".
+
+# Keys appearing in tool outputs that should NOT be verified numerically:
+# - Handle keys (run_id, trade_id) — verified by the handle gate.
+# - Configuration / metadata keys — these are inputs the agent passed or
+#   structural metadata, not "facts" the agent should be quoting.
+_NON_NUMERIC_SNAPSHOT_KEYS: frozenset[str] = frozenset(
+    {
+        *_HANDLE_KEYS,
+        *_HANDLE_LIST_KEYS,
+        "symbol",
+        "exchange",
+        "source",
+        "as_of",
+        "timeframe",
+        "tf",
+        "bins",
+        "lookback",
+        "lookback_bars",
+        "length",
+        "pivot_strength_used",
+    }
+)
+
+
+def _collect_tool_outputs(
+    messages: list[ModelRequest | ModelResponse],
+) -> dict[str, list[dict[str, Any]]]:
+    """`tool_name → list of return payloads` observed this turn.
+
+    A tool may be called multiple times in a single turn (e.g. once per TF
+    when asking for indicators on 1h, 4h, 1d); each call produces an entry.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if not isinstance(part, ToolReturnPart):
+                continue
+            try:
+                payload = part.model_response_object()
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                out.setdefault(part.tool_name, []).append(payload)
+    return out
+
+
+def _find_numeric_values(payload: Any, target_key: str, sink: list[float]) -> None:
+    """Recursively collect every numeric scalar stored under ``target_key`` in
+    ``payload``. Booleans are excluded (Python's ``bool`` is a subclass of
+    ``int``) — they'd otherwise pollute matches with 0.0 / 1.0."""
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            if k == target_key:
+                if isinstance(v, bool):
+                    continue
+                if isinstance(v, (int, float)):
+                    sink.append(float(v))
+            else:
+                _find_numeric_values(v, target_key, sink)
+    elif isinstance(payload, list):
+        for item in payload:
+            _find_numeric_values(item, target_key, sink)
+
+
+def _verify_snapshot_numerics(
+    citation: ToolCitation,
+    tool_outputs: dict[str, list[dict[str, Any]]],
+) -> list[tuple[str, float, list[float]]]:
+    """Return a list of mismatches detected in this citation's snapshot.
+
+    Each mismatch is a ``(key, cited_value, found_values)`` triple:
+    - ``cited_value`` is the numeric value the model placed in the snapshot.
+    - ``found_values`` are all numeric values stored under that key in any of
+      the tool's outputs this turn.
+    - None of the ``found_values`` are within tolerance of ``cited_value``.
+
+    Tolerance: 0.1% relative (max with 1e-6 absolute for near-zero values).
+    Empty list ⇒ every checkable key matches some output. A key that doesn't
+    appear in any output is silently skipped (the cited value may be derived
+    from the output, not present verbatim — e.g. midpoint of two prices).
+    """
+    mismatches: list[tuple[str, float, list[float]]] = []
+    payloads = tool_outputs.get(citation.tool_name, [])
+    if not payloads:
+        return mismatches  # the citation gate handles tool-name correlation
+
+    for key, cited in (citation.snapshot or {}).items():
+        if key in _NON_NUMERIC_SNAPSHOT_KEYS:
+            continue
+        if isinstance(cited, bool):
+            continue
+        if not isinstance(cited, (int, float)):
+            continue
+        cited_f = float(cited)
+
+        found: list[float] = []
+        for payload in payloads:
+            _find_numeric_values(payload, key, found)
+        if not found:
+            continue  # key absent in output → unverifiable, soft-pass
+
+        tol_rel = 1e-3
+        tol_abs = 1e-6
+        match = any(abs(cited_f - real) <= max(tol_rel * abs(real), tol_abs) for real in found)
+        if not match:
+            mismatches.append((key, cited_f, sorted(set(found))))
+    return mismatches
+
+
+# Semantic tag verification --------------------------------------------------
+#
+# Tags in the allowlist (`_ALLOWED_SEMANTIC_TAGS`) pass the spelling check.
+# But the agent can still emit ``lvn_support`` without the volume profile
+# having actually detected any LVN. This map registers tags whose
+# correctness can be checked against the tool output that would have
+# produced them. Tags without a registered requirement pass through
+# (their semantics are interpretive — we don't fail on those).
+
+_SEMANTIC_TAG_REQUIREMENTS: dict[str, tuple[str, Callable[[dict[str, Any]], bool]]] = {
+    "lvn_support": (
+        "get_volume_profile",
+        lambda data: bool(data.get("low_volume_nodes")),
+    ),
+    "lvn_resistance": (
+        "get_volume_profile",
+        lambda data: bool(data.get("low_volume_nodes")),
+    ),
+    "swept_liquidity": (
+        "get_market_structure",
+        lambda data: bool(data.get("swing_highs")) or bool(data.get("swing_lows")),
+    ),
+}
+
+
+def _verify_semantic_tags(
+    tags: list[str],
+    tool_outputs: dict[str, list[dict[str, Any]]],
+) -> list[str]:
+    """Tags lacking supporting structure in this turn's tool outputs.
+
+    A tag is "unsupported" if:
+    - It appears in ``_SEMANTIC_TAG_REQUIREMENTS``, AND
+    - The required tool was not called this turn OR none of its outputs
+      satisfy the structure check.
+
+    Tags outside the registry pass through (interpretive — out of scope for
+    automated verification).
+    """
+    unsupported: list[str] = []
+    for tag in tags:
+        req = _SEMANTIC_TAG_REQUIREMENTS.get(tag)
+        if req is None:
+            continue
+        tool_name, check = req
+        payloads = tool_outputs.get(tool_name, [])
+        if not payloads:
+            unsupported.append(tag)
+            continue
+        ok = False
+        for payload in payloads:
+            data = payload.get("data")
+            if isinstance(data, dict) and check(data):
+                ok = True
+                break
+        if not ok:
+            unsupported.append(tag)
+    return unsupported
+
+
 # Tipos de bias que activan el gate "no operes" cuando severidad es high.
 # Excluye disposition_effect (es patrón de exit, no señal de "no entres ahora")
 # y FOMO (heurística depende de tags del usuario, demasiado frágil para gate
@@ -156,6 +335,162 @@ def _collect_stale_tool_warnings(
                 if isinstance(w, str) and w.startswith("stale:"):
                     out.append((part.tool_name, w))
     return out
+
+
+def _collect_latest_confluence_data(
+    messages: list[ModelRequest | ModelResponse],
+) -> dict[str, object] | None:
+    """Devuelve el `data` (ConfluenceMap shape) del último output de
+    `get_multi_tf_confluence` en este turno. None si no se llamó.
+
+    Usado por la persistencia de F5.5: el `factor_snapshot.deterministic`
+    se construye a partir de aquí — ScoreComponents por timeframe + agregado.
+    """
+    latest: dict[str, object] | None = None
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if not isinstance(part, ToolReturnPart):
+                continue
+            if part.tool_name != "get_multi_tf_confluence":
+                continue
+            try:
+                payload = part.model_response_object()
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            data = payload.get("data")
+            if isinstance(data, dict):
+                latest = data  # type: ignore[assignment]
+    return latest
+
+
+def _confluence_to_deterministic_snapshot(
+    cmap: dict[str, object],
+) -> dict[str, object]:
+    """Convierte el ConfluenceMap.data (JSON shape) al sub-dict
+    `factor_snapshot.deterministic`. Mismas claves que el helper público
+    en `confluence.py::confluence_map_to_factor_snapshot_deterministic`,
+    pero operando sobre el dict ya serializado (no el pydantic model)."""
+    by_tf: dict[str, dict[str, float]] = {}
+    raw_by_tf = cmap.get("by_tf")
+    if isinstance(raw_by_tf, list):
+        for entry in raw_by_tf:
+            if not isinstance(entry, dict):
+                continue
+            tf = entry.get("timeframe")
+            comp = entry.get("score_components")
+            score_total = entry.get("score_total")
+            if not isinstance(tf, str) or not isinstance(comp, dict):
+                continue
+            row: dict[str, float] = {}
+            for key in ("ema_stack", "regime", "rsi", "volume", "distance_atr"):
+                v = comp.get(key)
+                if isinstance(v, (int, float)):
+                    row[key] = float(v)
+            if isinstance(score_total, (int, float)):
+                row["score_total"] = float(score_total)
+            by_tf[tf] = row
+    return {
+        "by_tf": by_tf,
+        "aggregate_bias": cmap.get("aggregate_bias"),
+        "aggregate_agreement_pct": cmap.get("aggregate_agreement_pct"),
+    }
+
+
+# Vocabulario controlado de semantic_tags. El agente puede emitir tags fuera
+# de esta lista en TradeIdea.semantic_tags pero el validator los descarta
+# antes de persistir — mantiene `factor_outcomes.factor_name` predecible
+# para queries de agregación.
+_ALLOWED_SEMANTIC_TAGS: frozenset[str] = frozenset(
+    {
+        "lvn_support",
+        "lvn_resistance",
+        "fvg_fill",
+        "fvg_imbalance",
+        "vwap_reclaim",
+        "vwap_rejection",
+        "swept_liquidity",
+        "btc_correlation_breakdown",
+        "funding_squeeze",
+        "oi_divergence",
+        "session_open_us",
+        "session_open_asia",
+        "session_open_eu",
+        "weekend_low_liquidity",
+        "post_news_breakout",
+        "mean_reversion_setup",
+        "trend_continuation_setup",
+    }
+)
+
+
+def _filter_semantic_tags(tags: list[str]) -> list[str]:
+    """Mantiene solo los tags en el vocabulario controlado, deduplicados
+    preservando orden de inserción."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for tag in tags:
+        if not isinstance(tag, str):
+            continue
+        norm = tag.strip().lower()
+        if norm in _ALLOWED_SEMANTIC_TAGS and norm not in seen:
+            seen.add(norm)
+            out.append(norm)
+    return out
+
+
+def _build_factor_snapshot(
+    *,
+    messages: list[ModelRequest | ModelResponse],
+    output: object,
+) -> dict[str, object] | None:
+    """Construye el dict `factor_snapshot` que se persistirá en
+    `journal_trades.factor_snapshot`. Devuelve None si get_multi_tf_confluence
+    no se llamó este turno (sin scorer data no hay snapshot deterministic).
+
+    Shape (version=1):
+        {
+          "version": 1,
+          "captured_at": ISO ts,
+          "deterministic": {
+            "by_tf": {"1h": {"ema_stack": .., ...}, "4h": {...}, ...},
+            "aggregate_bias": "bull"|"bear"|"range",
+            "aggregate_agreement_pct": float
+          },
+          "semantic_tags": [...] (allow-list filtered),
+          "context": {"regime_label": "...", "entry_tf": "..."}
+        }
+    """
+    cdata = _collect_latest_confluence_data(messages)
+    if cdata is None:
+        return None
+
+    deterministic = _confluence_to_deterministic_snapshot(cdata)
+
+    # semantic_tags solo existen en TradeIdea (no en BriefAnalysis). Acceso
+    # defensivo por si el caller pasa otro modelo.
+    raw_tags = getattr(output, "semantic_tags", None) or []
+    semantic_tags = _filter_semantic_tags(list(raw_tags))
+
+    # Contexto: régimen + timeframe de entrada. Otros campos (atr_pct_1h,
+    # session, etc.) los puede añadir el dispatcher de post-mortem desde
+    # OHLCV reciente — el snapshot inicial los deja fuera para no inflar.
+    regime_label = getattr(getattr(output, "regime", None), "label", None)
+    entry_tf = getattr(output, "timeframe", None)
+
+    return {
+        "version": 1,
+        "captured_at": datetime.now(tz=UTC).isoformat(),
+        "deterministic": deterministic,
+        "semantic_tags": semantic_tags,
+        "context": {
+            "regime_label": regime_label,
+            "entry_tf": entry_tf,
+        },
+    }
 
 
 def _extract_aggregate_bias(
@@ -258,7 +593,7 @@ def _collect_high_severity_biases(
 ) -> list[str]:
     """Devuelve los `kind` de bias events con `severity=high` que provienen
     de un `detect_bias_patterns` ejecutado este turno. Lista vacía si no hubo
-    flags high o si no se llamó la tool. """
+    flags high o si no se llamó la tool."""
     high_kinds: list[str] = []
     for msg in messages:
         if not isinstance(msg, ModelRequest):
@@ -399,10 +734,7 @@ def register_validators(
             # Bajamos a 'medium' silenciosamente y logueamos para auditar.
             # No usamos ModelRetry porque el análisis es válido, solo la
             # etiqueta estaba miscalibrada — recalibrarla evita retry caros.
-            if (
-                output.confidence == "high"
-                and _VERDICT_PAUSE_PATTERN.search(output.verdict_es)
-            ):
+            if output.confidence == "high" and _VERDICT_PAUSE_PATTERN.search(output.verdict_es):
                 ctx.deps.log.info(
                     "validator.confidence_pause_mismatch",
                     verdict=output.verdict_es[:80],
@@ -432,8 +764,7 @@ def register_validators(
                     ctx.deps.log.info(
                         "validator.level_in_lvn",
                         offending=[
-                            {"label": lbl, "price": p, "lvn_center": c}
-                            for lbl, p, c in offending
+                            {"label": lbl, "price": p, "lvn_center": c} for lbl, p, c in offending
                         ],
                         n_offending=len(offending),
                     )
@@ -533,7 +864,7 @@ def register_validators(
         # Numeric fields requiring citations.
         for label, value, cites in (
             ("entry", output.entry, output.entry_citations),
-            ("invalidation", output.invalidation, output.invalidation_citations),
+            ("stop_loss", output.stop_loss, output.stop_loss_citations),
         ):
             if value is not None and not cites:
                 raise ModelRetry(
@@ -550,6 +881,72 @@ def register_validators(
                 )
             _check(f"target {tgt.label}", tgt.citations)
 
+        # Pre-entry invalidation conditions: each must cite a real tool and
+        # be anchored to a sensible (symbol, timeframe). Cross-symbol is
+        # allowed ONLY when symbol == BTCUSDT, idea symbol is a non-BTC
+        # altcoin, AND the condition cites get_btc_correlation — the
+        # correlation gate prevents "throw BTC at every altcoin".
+        idea_symbol_upper = output.symbol.upper()
+        for i, cond in enumerate(output.invalidation_conditions):
+            label = f"invalidation_condition[{i}]"
+            if not cond.citations:
+                raise ModelRetry(
+                    f"{label} requires at least one ToolCitation "
+                    f"(tool_name from {sorted(used_tools)})."
+                )
+            _check(label, cond.citations)
+            cond_symbol = cond.spec.symbol.upper()
+            if cond_symbol != idea_symbol_upper:
+                is_alt_with_btc_anchor = cond_symbol == "BTCUSDT" and idea_symbol_upper != "BTCUSDT"
+                if not is_alt_with_btc_anchor:
+                    raise ModelRetry(
+                        f"{label} references symbol={cond_symbol!r} but the "
+                        f"idea is on {idea_symbol_upper!r}. Cross-symbol "
+                        f"invalidation only allowed when the idea is on a "
+                        f"non-BTC altcoin AND the condition spec is on "
+                        f"BTCUSDT AND its citations include "
+                        f"get_btc_correlation."
+                    )
+                cites_btc_corr = any(c.tool_name == "get_btc_correlation" for c in cond.citations)
+                if not cites_btc_corr:
+                    raise ModelRetry(
+                        f"{label} is cross-symbol (BTCUSDT vs idea "
+                        f"{idea_symbol_upper!r}) but does NOT cite "
+                        f"get_btc_correlation. Add a citation referencing "
+                        f"that tool's output showing high pearson, or move "
+                        f"the condition back to symbol={idea_symbol_upper!r}."
+                    )
+
+        # `expires_at` is opt-in. When the agent emits it, it's an
+        # auditable claim — must be tz-aware UTC, strictly in the future,
+        # and accompanied by rationale + ≥1 citation.
+        if output.expires_at is not None:
+            if output.expires_at.tzinfo is None:
+                raise ModelRetry(
+                    "`expires_at` must be timezone-aware UTC (e.g. "
+                    "'2026-05-12T14:30:00Z'). Got a naive datetime."
+                )
+            now_utc = datetime.now(tz=UTC)
+            if output.expires_at <= now_utc:
+                raise ModelRetry(
+                    f"`expires_at={output.expires_at.isoformat()}` is not "
+                    f"in the future (now={now_utc.isoformat()}). Either "
+                    f"emit a future timestamp or set expires_at=null."
+                )
+            if not output.expires_at_rationale:
+                raise ModelRetry(
+                    "`expires_at` is set but `expires_at_rationale` is "
+                    "empty. Provide a short reason for the decay window "
+                    "(e.g. 'funding squeeze unwinds within 24h')."
+                )
+            if not output.expires_at_citations:
+                raise ModelRetry(
+                    "`expires_at` is set but `expires_at_citations` is "
+                    "empty. Provide ≥1 ToolCitation backing the rationale "
+                    "(e.g. get_funding_rate showing the squeeze)."
+                )
+            _check("expires_at", output.expires_at_citations)
+
         # Non-no_trade ideas need at least one Confluence with citations.
         if output.direction != "no_trade" and not output.confluences:
             raise ModelRetry(
@@ -559,6 +956,152 @@ def register_validators(
         for conf in output.confluences:
             _check(f"confluence {conf.timeframe}", conf.citations)
 
+        # Snapshot numeric verification — every cited value must match the
+        # tool's actual output within 0.1% tolerance (or be absent from the
+        # output, in which case we assume it's a derived quantity). Closes
+        # the "called the right tool but quoted an invented number" gap.
+        tool_outputs = _collect_tool_outputs(list(ctx.messages))
+        all_cited: list[tuple[str, ToolCitation]] = []
+        for c in output.entry_citations:
+            all_cited.append(("entry", c))
+        for c in output.stop_loss_citations:
+            all_cited.append(("stop_loss", c))
+        for tgt in output.targets:
+            for c in tgt.citations:
+                all_cited.append((f"target {tgt.label}", c))
+        for conf in output.confluences:
+            for c in conf.citations:
+                all_cited.append((f"confluence {conf.timeframe}", c))
+        for i, cond in enumerate(output.invalidation_conditions):
+            for c in cond.citations:
+                all_cited.append((f"invalidation_condition[{i}]", c))
+        for c in output.expires_at_citations:
+            all_cited.append(("expires_at", c))
+
+        for label, cite in all_cited:
+            mismatches = _verify_snapshot_numerics(cite, tool_outputs)
+            if not mismatches:
+                continue
+            detail = "; ".join(
+                f"{key!r}={cited:.6g} not in tool output values {[round(v, 6) for v in real]}"
+                for key, cited, real in mismatches
+            )
+            raise ModelRetry(
+                f"{label} citation tool_name={cite.tool_name!r} has snapshot "
+                f"mismatches: {detail}. Every numeric value in the snapshot "
+                f"must match the corresponding value from the tool's actual "
+                f"output (tolerance 0.1%). Re-cite using the real numbers, "
+                f"or remove the mismatched keys if you derived the cited "
+                f"value (e.g. computed a midpoint) — derived values should "
+                f"not appear in snapshot, they belong in rationale."
+            )
+
+        # Semantic tag verification — tags like 'lvn_support' require the
+        # corresponding tool (get_volume_profile) to have actually detected
+        # an LVN this turn. Soft gate: degrade confidence from 'high', log
+        # the unsupported tags, surface a warning in risk_notes. Promote to
+        # hard gate after observing production logs.
+        unsupported_tags = _verify_semantic_tags(list(output.semantic_tags or []), tool_outputs)
+        if unsupported_tags:
+            ctx.deps.log.info(
+                "validator.semantic_tags_unsupported",
+                tags=unsupported_tags,
+                direction=output.direction,
+                symbol=output.symbol,
+                timeframe=output.timeframe,
+            )
+            if output.confidence == "high":
+                output.confidence = "medium"
+            warning = (
+                f"semantic_tags sin estructura verificada este turno: {', '.join(unsupported_tags)}"
+            )
+            output.risk_notes = f"{output.risk_notes} ({warning})" if output.risk_notes else warning
+
+        # Factor Gate (A.2) — consulta factor_stats_repo y aplica gate
+        # progresivo basado en win-rate LCB Bayesian del usuario bajo el
+        # régimen actual. Solo se ejecuta si get_multi_tf_confluence fue
+        # llamada (sin snapshot no hay factores que evaluar). Errores
+        # transitorios de DB se loguean y NO bloquean el trade — el gate
+        # es una segunda capa, no debe convertir un infra hiccup en
+        # rechazo silencioso.
+        factor_snapshot_for_gate = _build_factor_snapshot(
+            messages=list(ctx.messages),
+            output=output,
+        )
+        if factor_snapshot_for_gate is not None:
+            ctx_dict = factor_snapshot_for_gate.get("context")
+            regime_label: str | None = None
+            if isinstance(ctx_dict, dict):
+                raw_regime = ctx_dict.get("regime_label")
+                if isinstance(raw_regime, str):
+                    regime_label = raw_regime
+            verdict = None
+            try:
+                async with ctx.deps.session_factory() as session:
+                    verdict = await evaluate_factor_gate(
+                        session,
+                        user_id=ctx.deps.user_id,
+                        factor_snapshot=factor_snapshot_for_gate,
+                        regime_label=regime_label,
+                    )
+            except Exception as exc:
+                ctx.deps.log.warning(
+                    "validator.factor_gate_failed",
+                    error=str(exc),
+                    user_id=ctx.deps.user_id,
+                )
+
+            if verdict is not None:
+                if not verdict.passed:
+                    blocks_desc = "; ".join(
+                        f"{b.factor_name}"
+                        f"{('@' + b.factor_tf) if b.factor_tf else ''}"
+                        f" (n={b.n_trades}, wr_lcb={b.win_rate_lcb:.2f})"
+                        for b in verdict.blocking_factors
+                    )
+                    ctx.deps.log.info(
+                        "validator.factor_gate_hard_veto",
+                        blockers=[b.model_dump() for b in verdict.blocking_factors],
+                    )
+                    raise ModelRetry(
+                        f"Factor gate (hard veto): este setup se apoya en "
+                        f"factores con historial débil bajo tu régimen "
+                        f"actual: {blocks_desc}. Cuando win_rate_lcb < 30% "
+                        f"con n ≥ 100, el edge histórico es negativo en "
+                        f"esperanza. Opciones: (a) revisa si alguno de esos "
+                        f"factores NO está realmente activo aquí (quítalo "
+                        f"de semantic_tags o de las confluences citadas); "
+                        f"(b) cambia direction='no_trade' y explica qué "
+                        f"triggers reabrirían la operativa."
+                    )
+
+                if verdict.soft_veto_factors:
+                    soft_desc = ", ".join(
+                        f"{b.factor_name}"
+                        f"{('@' + b.factor_tf) if b.factor_tf else ''}"
+                        f" (n={b.n_trades}, wr_lcb={b.win_rate_lcb:.2f})"
+                        for b in verdict.soft_veto_factors
+                    )
+                    ctx.deps.log.info(
+                        "validator.factor_gate_soft_veto",
+                        factors=[b.model_dump() for b in verdict.soft_veto_factors],
+                    )
+                    if output.confidence != "low":
+                        output.confidence = "low"
+                    warning = (
+                        f"factor_stats soft veto bajo este régimen: {soft_desc} "
+                        f"→ confidence forzada a 'low'"
+                    )
+                    output.risk_notes = (
+                        f"{output.risk_notes} ({warning})" if output.risk_notes else warning
+                    )
+
+                if verdict.advisory_factors:
+                    ctx.deps.log.info(
+                        "validator.factor_gate_advisory",
+                        factors=[b.model_dump() for b in verdict.advisory_factors],
+                    )
+
         # Position sizing — requerido para non-no_trade ideas.
         # El system prompt instruye al modelo a calcular position_size_pct +
         # leverage_x desde trader_profile.risk_per_trade_pct. Si los omite,
@@ -566,12 +1109,12 @@ def register_validators(
         if (
             output.direction in ("long", "short")
             and output.entry is not None
-            and output.invalidation is not None
+            and output.stop_loss is not None
         ):
             if output.position_size_pct is None:
                 raise ModelRetry(
                     f"direction='{output.direction}' requiere `position_size_pct`. "
-                    f"Calcula: stop_distance_pct = |entry − invalidation| / entry, "
+                    f"Calcula: stop_distance_pct = |entry − stop_loss| / entry, "
                     f"position_size_pct = risk_per_trade_pct / stop_distance_pct. "
                     f"Ver sección 'Position sizing' del system prompt."
                 )
@@ -584,18 +1127,13 @@ def register_validators(
                 )
             # Coherencia matemática: posición × leverage debe coincidir
             # aproximadamente con el riesgo declarado del perfil.
-            stop_distance_pct = (
-                abs(output.entry - output.invalidation) / output.entry * 100
-            )
+            stop_distance_pct = abs(output.entry - output.stop_loss) / output.entry * 100
             if stop_distance_pct > 0:
                 # risk_per_trade_pct implícito = position_size_pct × stop_distance_pct / 100
                 # No imponemos un floor exacto; sólo que no sea absurdo (>10%
                 # del capital de riesgo en un solo trade).
                 implied_risk_pct = (
-                    output.position_size_pct
-                    * output.leverage_x
-                    * stop_distance_pct
-                    / 100
+                    output.position_size_pct * output.leverage_x * stop_distance_pct / 100
                 )
                 if implied_risk_pct > 10.0:
                     raise ModelRetry(
@@ -618,9 +1156,8 @@ def register_validators(
         if output.direction in ("long", "short"):
             aggregate_bias = _extract_aggregate_bias(list(ctx.messages))
             if aggregate_bias is not None:
-                contradicts = (
-                    (output.direction == "long" and aggregate_bias == "bear")
-                    or (output.direction == "short" and aggregate_bias == "bull")
+                contradicts = (output.direction == "long" and aggregate_bias == "bear") or (
+                    output.direction == "short" and aggregate_bias == "bull"
                 )
                 if contradicts and output.confidence != "low":
                     raise ModelRetry(
@@ -645,13 +1182,13 @@ def register_validators(
         if (
             output.direction in ("long", "short")
             and output.entry is not None
-            and output.invalidation is not None
+            and output.stop_loss is not None
             and output.targets
         ):
-            risk = abs(output.entry - output.invalidation)
+            risk = abs(output.entry - output.stop_loss)
             if risk == 0:
                 raise ModelRetry(
-                    f"entry={output.entry} == invalidation={output.invalidation} → "
+                    f"entry={output.entry} == stop_loss={output.stop_loss} → "
                     f"riesgo nulo, R:R indefinido. Pon un SL lógico (no en el entry) "
                     f"o cambia direction='no_trade'."
                 )
@@ -666,9 +1203,9 @@ def register_validators(
                         f"Revisa los niveles o cambia direction='short'/'no_trade'."
                     )
                 # Y el SL POR DEBAJO
-                if output.invalidation >= output.entry:
+                if output.stop_loss >= output.entry:
                     raise ModelRetry(
-                        f"direction='long' pero invalidation={output.invalidation} ≥ "
+                        f"direction='long' pero stop_loss={output.stop_loss} ≥ "
                         f"entry={output.entry}. En long el SL va POR DEBAJO del entry."
                     )
             else:  # short
@@ -678,20 +1215,30 @@ def register_validators(
                         f"direction='short' pero {first_tp.label}={first_tp.price} ≥ "
                         f"entry={output.entry}. En short el TP va POR DEBAJO del entry."
                     )
-                if output.invalidation <= output.entry:
+                if output.stop_loss <= output.entry:
                     raise ModelRetry(
-                        f"direction='short' pero invalidation={output.invalidation} ≤ "
+                        f"direction='short' pero stop_loss={output.stop_loss} ≤ "
                         f"entry={output.entry}. En short el SL va POR ENCIMA del entry."
                     )
             rr = reward / risk
-            if rr < 1.5:
+            # B.2: per-symbol slippage buffer added on top of the base 1.5 floor.
+            # Crypto perps slip more than the chart suggests; the buffer
+            # raises the NOMINAL R:R required so the post-fill realized
+            # ratio still beats 1.5. Tunable per symbol in Settings.
+            from app.config import get_settings
+
+            slippage_buffer = get_settings().slippage_buffer_r(output.symbol)
+            min_rr = 1.5 + slippage_buffer
+            if rr < min_rr:
                 raise ModelRetry(
                     f"R:R al primer TP es {rr:.2f}:1 (reward={reward:.2f} / "
-                    f"risk={risk:.2f}). Mínimo aceptable 1.5:1 — si el setup no "
-                    f"lo permite, mueve el SL más cerca del entry, ajusta el TP a "
-                    f"un nivel más lejano (cita tool_name=get_market_structure), "
-                    f"o cambia direction='no_trade'. NO propongas trades con "
-                    f"esperanza negativa."
+                    f"risk={risk:.2f}). Mínimo aceptable {min_rr:.2f}:1 para "
+                    f"{output.symbol} (1.5 base + {slippage_buffer:.2f} de buffer "
+                    f"por slippage cripto). Mueve el SL más cerca del entry, "
+                    f"ajusta el TP a un nivel más lejano (cita "
+                    f"tool_name=get_market_structure), o cambia "
+                    f"direction='no_trade'. NO propongas trades con esperanza "
+                    f"negativa una vez descontado el slippage real."
                 )
 
         # Validator B — LVN check sobre targets (FASE 1: soft-warn).
@@ -712,8 +1259,7 @@ def register_validators(
                     "validator.target_in_lvn",
                     direction=output.direction,
                     offending=[
-                        {"label": lbl, "price": p, "lvn_center": c}
-                        for lbl, p, c in offending
+                        {"label": lbl, "price": p, "lvn_center": c} for lbl, p, c in offending
                     ],
                     n_offending=len(offending),
                 )
@@ -724,10 +1270,7 @@ def register_validators(
         # En TradeIdea el "verdict" vive en summary_es (más largo). Si el
         # modelo emite confidence='high' pero el summary recomienda esperar
         # un trigger antes de operar, recalibramos a 'medium'.
-        if (
-            output.confidence == "high"
-            and _VERDICT_PAUSE_PATTERN.search(output.summary_es)
-        ):
+        if output.confidence == "high" and _VERDICT_PAUSE_PATTERN.search(output.summary_es):
             ctx.deps.log.info(
                 "validator.confidence_pause_mismatch",
                 summary=output.summary_es[:120],
@@ -756,15 +1299,24 @@ def register_validators(
         if (
             output.direction in ("long", "short")
             and output.entry is not None
-            and output.invalidation is not None
+            and output.stop_loss is not None
             and output.targets
         ):
+            # F5.5: construir factor_snapshot desde el último ConfluenceMap
+            # del turno + semantic_tags (filtrados al allow-list) +
+            # contexto del régimen. None si la tool no se llamó este turn
+            # — el trade quedará sin attribution (no fan-out al cerrar).
+            factor_snapshot = _build_factor_snapshot(
+                messages=list(ctx.messages),
+                output=output,
+            )
             try:
                 async with ctx.deps.session_factory() as session:
                     setup_id = await insert_setup_from_idea(
                         session,
                         user_id=ctx.deps.user_id,
                         idea=output,
+                        factor_snapshot=factor_snapshot,
                     )
                 ctx.deps.log.info(
                     "agent.setup_persisted",
@@ -773,6 +1325,12 @@ def register_validators(
                     symbol=output.symbol,
                     timeframe=output.timeframe,
                     side=output.direction,
+                    has_snapshot=factor_snapshot is not None,
+                    n_semantic_tags=(
+                        len(factor_snapshot.get("semantic_tags", []))
+                        if factor_snapshot is not None
+                        else 0
+                    ),
                 )
             except Exception as exc:
                 # No bloquear la respuesta del chat por un fallo de journal.

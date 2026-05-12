@@ -13,19 +13,24 @@ from pydantic_ai.providers.openrouter import OpenRouterProvider
 from app.agent.deps import AgentDeps
 from app.agent.models import BriefAnalysis, TradeIdea
 from app.agent.system_prompt import build_system_blocks
+from app.agent.tools.basis import register_basis_tool
 from app.agent.tools.biases import register_bias_tool
 from app.agent.tools.confluence import register_confluence_tools
 from app.agent.tools.correlation import register_correlation_tool
 from app.agent.tools.cpcv import register_cpcv_tool
 from app.agent.tools.create_alert import register_create_alert_tool
 from app.agent.tools.delete_alert import register_delete_alert_tool
+from app.agent.tools.dominance import register_dominance_tool
+from app.agent.tools.factor_stats import register_factor_stats_tool
 from app.agent.tools.indicators import register_indicator_tools
 from app.agent.tools.journal_query import register_journal_query_tool
 from app.agent.tools.list_alerts import register_list_alerts_tool
 from app.agent.tools.log_trade import register_log_trade_tool
 from app.agent.tools.ohlcv import register_ohlcv_tools
 from app.agent.tools.perps_data import register_perps_data_tools
+from app.agent.tools.perps_dynamics import register_perps_dynamics_tool
 from app.agent.tools.run_backtest import register_run_backtest_tool
+from app.agent.tools.similar_setups import register_similar_setups_tool
 from app.agent.tools.strategy_metrics import register_strategy_metrics_tool
 from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
@@ -76,16 +81,21 @@ def build_agent() -> Agent[AgentDeps, BriefAnalysis | TradeIdea | str]:
     register_ohlcv_tools(agent)
     register_indicator_tools(agent)
     register_structure_tools(agent)
+    register_basis_tool(agent)
     register_confluence_tools(agent)
     register_correlation_tool(agent)
+    register_dominance_tool(agent)
     register_perps_data_tools(agent)
+    register_perps_dynamics_tool(agent)
     register_volume_profile_tool(agent)
     register_log_trade_tool(agent)
     register_journal_query_tool(agent)
     register_bias_tool(agent)
     register_run_backtest_tool(agent)
+    register_similar_setups_tool(agent)
     register_walk_forward_tool(agent)
     register_cpcv_tool(agent)
+    register_factor_stats_tool(agent)
     register_strategy_metrics_tool(agent)
     register_create_alert_tool(agent)
     register_list_alerts_tool(agent)

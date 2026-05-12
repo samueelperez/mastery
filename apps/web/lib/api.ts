@@ -269,6 +269,18 @@ export interface SetupTargetDTO {
   hit_at?: string | null
 }
 
+export interface ToolCitationDTO {
+  tool_name: string
+  tool_call_id?: string | null
+  snapshot: Record<string, unknown>
+}
+
+export interface InvalidationConditionDTO {
+  spec: Record<string, unknown>
+  rationale: string
+  citations: ToolCitationDTO[]
+}
+
 export interface SetupListRowDTO {
   id: string
   user_id: string
@@ -279,7 +291,7 @@ export interface SetupListRowDTO {
   status: SetupStatus
   source: string
   entry_px: number
-  invalidation_px: number | null
+  stop_loss_px: number | null
   exit_px: number | null
   size: number
   r_multiple: number | null
@@ -287,10 +299,13 @@ export interface SetupListRowDTO {
   regime: string
   confidence: "low" | "medium" | "high" | null
   targets: SetupTargetDTO[]
+  invalidation_conditions: InvalidationConditionDTO[]
+  expires_at: string | null
   mistakes: string | null
   proposed_at: string | null
   entry_hit_at: string | null
   closed_at: string | null
+  invalidated_at: string | null
   created_at: string
 }
 
@@ -304,16 +319,61 @@ export interface SetupEventDTO {
     | "expired"
     | "manual_close"
     | "cancelled"
+    | "invalidated"
+    | "review_generated"
+    // B.1 — RiskManager events (migration 016).
+    | "be_moved"
+    | "trailing_updated"
+    | "time_stopped"
+    // C.3 — Scout proposal approval (migration 019).
+    | "approved"
+    | "rejected_by_user"
   candle_ts: string
   payload: Record<string, unknown>
   created_at: string
 }
 
+export type ReviewState = "on_track" | "at_risk" | "reversing"
+export type ReviewRecommendation =
+  | "hold"
+  | "tighten_sl"
+  | "partial_close"
+  | "exit_now"
+export type ReviewTriggerKind =
+  | "entry_hit"
+  | "tp_partial"
+  | "time_elapsed"
+  | "price_move"
+  | "approaching_sl"
+  | "regime_change"
+
+export interface TradeReviewDTO {
+  id: string
+  trade_id: string
+  user_id: string
+  trigger_kind: ReviewTriggerKind
+  trigger_payload: Record<string, unknown>
+  current_state: ReviewState
+  recommendation: ReviewRecommendation
+  summary: string
+  rationale: string
+  citations: ToolCitationDTO[]
+  price_at_review: number
+  model_id: string
+  usage_tokens: Record<string, unknown> | null
+  cost_usd: number | null
+  prompt_version: string | null
+  created_at: string
+}
+
 export interface SetupDetailDTO extends SetupListRowDTO {
   summary_text: string
+  summary_es_full: string | null
   news_24h: Record<string, unknown>
   features: Record<string, unknown>
   mistakes: string | null
+  expires_at_rationale: string | null
+  expires_at_citations: ToolCitationDTO[] | null
   updated_at: string
   events: SetupEventDTO[]
 }
@@ -367,12 +427,59 @@ export async function fetchSetup(
   return (await res.json()) as SetupDetailDTO
 }
 
+export async function fetchSetupReviews(
+  setupId: string,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<TradeReviewDTO[]> {
+  const params = new URLSearchParams()
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit))
+  const qs = params.toString() ? `?${params}` : ""
+  const res = await apiFetch(
+    `${env.apiUrl}/journal/setups/${encodeURIComponent(setupId)}/reviews${qs}`,
+    { signal: opts.signal },
+  )
+  if (!res.ok) throw new Error(`fetchSetupReviews failed: ${res.status}`)
+  return (await res.json()) as TradeReviewDTO[]
+}
+
+export async function fetchReview(
+  reviewId: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<TradeReviewDTO> {
+  const res = await apiFetch(
+    `${env.apiUrl}/journal/reviews/${encodeURIComponent(reviewId)}`,
+    { signal: opts.signal },
+  )
+  if (!res.ok) throw new Error(`fetchReview failed: ${res.status}`)
+  return (await res.json()) as TradeReviewDTO
+}
+
 export async function cancelSetupRequest(setupId: string): Promise<void> {
   const res = await apiFetch(
     `${env.apiUrl}/journal/setups/${encodeURIComponent(setupId)}/cancel`,
     { method: "POST" },
   )
   if (!res.ok) throw new Error(`cancelSetupRequest failed: ${res.status}`)
+}
+
+/** C.3 — Approve a pending scout proposal. Idempotent on backend
+ *  (re-approval returns 200 with `status="already_approved"`). */
+export async function approveSetupRequest(setupId: string): Promise<void> {
+  const res = await apiFetch(
+    `${env.apiUrl}/setups/${encodeURIComponent(setupId)}/approve`,
+    { method: "POST" },
+  )
+  if (!res.ok) throw new Error(`approveSetupRequest failed: ${res.status}`)
+}
+
+/** C.3 — Reject a pending scout proposal. Distinct from `cancel` (which
+ *  marks the setup as user-cancelled without scout-context). Idempotent. */
+export async function rejectSetupRequest(setupId: string): Promise<void> {
+  const res = await apiFetch(
+    `${env.apiUrl}/setups/${encodeURIComponent(setupId)}/reject`,
+    { method: "POST" },
+  )
+  if (!res.ok) throw new Error(`rejectSetupRequest failed: ${res.status}`)
 }
 
 // -----------------------------------------------------------------------------

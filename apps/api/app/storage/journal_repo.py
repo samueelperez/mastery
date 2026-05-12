@@ -253,6 +253,22 @@ async def list_all_for_embed_check(
 # -----------------------------------------------------------------------------
 
 
+class PostMortemHitInfo(BaseModel):
+    """Compact view del post-mortem adjuntado a un trade similar.
+
+    Solo presente cuando el trade tiene un post-mortem persistido. Mantenemos
+    el shape mínimo útil para que el agente principal entienda QUÉ se aprendió
+    del trade análogo: veredicto, lección, factores que fallaron/funcionaron y
+    calibración de confianza.
+    """
+
+    verdict: str  # thesis_held | thesis_broken | execution_error | noise
+    lesson_es: str
+    failure_factors: list[str]
+    success_factors: list[str]
+    confidence_calibration: str  # over | under | calibrated
+
+
 class JournalSearchHit(BaseModel):
     id: str
     trade_ts: datetime
@@ -264,6 +280,10 @@ class JournalSearchHit(BaseModel):
     r_multiple: float | None
     summary_text: str
     rrf_score: float
+    # F5.5: cuando el trade tiene post-mortem, lo adjuntamos para que el
+    # agente vea no solo "qué pasó" (r_multiple, summary) sino "qué se
+    # aprendió" (verdict, lección, factores). LEFT JOIN — None si no existe.
+    post_mortem: PostMortemHitInfo | None = None
 
 
 _HYBRID_SQL = text(
@@ -299,10 +319,21 @@ _HYBRID_SQL = text(
     -- Cast id::text porque la columna es `uuid` y asyncpg lo devuelve como
     -- objeto Python uuid.UUID. Pydantic v2 no coerce a str automáticamente
     -- y JournalSearchHit.id está declarado `str` → ValidationError.
+    --
+    -- F5.5: LEFT JOIN setup_post_mortems para que cada hit lleve la wisdom
+    -- aprendida tras cerrar (NULL si el trade no tuvo post-mortem o aún no
+    -- se ejecutó). Las listas failure_factors/success_factors no son
+    -- columnas; viven dentro de factor_verdicts JSONB. El cliente Python
+    -- las deriva filtrando por verdict ∈ {'failed','worked'} en _hit_from_row.
     SELECT t.id::text AS id, t.trade_ts, t.symbol, t.timeframe, t.side, t.setup_tag,
-           t.regime, t.r_multiple, t.summary_text, f.rrf AS rrf_score
+           t.regime, t.r_multiple, t.summary_text, f.rrf AS rrf_score,
+           pm.verdict AS pm_verdict,
+           pm.lesson_es AS pm_lesson_es,
+           pm.factor_verdicts AS pm_factor_verdicts,
+           pm.confidence_calibration AS pm_confidence_calibration
     FROM journal_trades t
     JOIN fused f USING (id)
+    LEFT JOIN setup_post_mortems pm ON pm.trade_id = t.id
     ORDER BY f.rrf DESC
     """
 )
@@ -327,7 +358,61 @@ async def hybrid_search(
             },
         )
     ).mappings().all()
-    return [JournalSearchHit.model_validate(dict(r)) for r in rows]
+    return [_hit_from_row(dict(r)) for r in rows]
+
+
+def _hit_from_row(row: dict[str, Any]) -> JournalSearchHit:
+    """Construye `JournalSearchHit` desde una row de `_HYBRID_SQL`. Si las
+    columnas `pm_*` están pobladas, adjunta el `post_mortem`; si están
+    NULL (trade sin post-mortem persistido), `post_mortem=None`.
+
+    `factor_verdicts` (JSONB con shape `{factor_key: {verdict, ...}}`) se
+    filtra a las listas `failure_factors` / `success_factors` (keys cuyo
+    verdict es 'failed' / 'worked'). Las keys con verdict 'neutral' o
+    desconocido se omiten."""
+    pm_info: PostMortemHitInfo | None = None
+    if row.get("pm_verdict") is not None and row.get("pm_lesson_es") is not None:
+        # `factor_verdicts` viene como dict ya parseado en asyncpg moderno;
+        # si llega como str (driver legacy) parseamos defensivamente.
+        raw_fv = row.get("pm_factor_verdicts")
+        if isinstance(raw_fv, str):
+            try:
+                raw_fv = json.loads(raw_fv)
+            except Exception:
+                raw_fv = None
+        failure_factors: list[str] = []
+        success_factors: list[str] = []
+        if isinstance(raw_fv, dict):
+            for key, info in raw_fv.items():
+                if not isinstance(info, dict):
+                    continue
+                verdict = info.get("verdict")
+                if verdict == "failed":
+                    failure_factors.append(str(key))
+                elif verdict == "worked":
+                    success_factors.append(str(key))
+
+        pm_info = PostMortemHitInfo(
+            verdict=str(row["pm_verdict"]),
+            lesson_es=str(row["pm_lesson_es"]),
+            failure_factors=failure_factors,
+            success_factors=success_factors,
+            confidence_calibration=str(row.get("pm_confidence_calibration") or "calibrated"),
+        )
+
+    return JournalSearchHit(
+        id=row["id"],
+        trade_ts=row["trade_ts"],
+        symbol=row["symbol"],
+        timeframe=row["timeframe"],
+        side=row["side"],
+        setup_tag=row["setup_tag"],
+        regime=row["regime"],
+        r_multiple=row["r_multiple"],
+        summary_text=row["summary_text"],
+        rrf_score=row["rrf_score"],
+        post_mortem=pm_info,
+    )
 
 
 # -----------------------------------------------------------------------------

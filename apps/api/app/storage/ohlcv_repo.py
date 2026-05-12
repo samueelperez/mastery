@@ -153,3 +153,32 @@ async def last_ts(
         )
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def existing_ts_in_window(
+    session: AsyncSession,
+    *,
+    exchange: str,
+    symbol: str,
+    timeframe: str,
+    since: datetime,
+    until: datetime,
+) -> set[datetime]:
+    """Returns the set of `ts` already persisted in `[since, until)`.
+
+    Used by the gap-fill flow to detect mid-history holes: `last_ts` only
+    catches gaps at the tail of the series — if a single candle was missed
+    in the middle and then live ingestion caught up, MAX(ts) jumps over the
+    hole and that hole persists forever. With this set, the caller can
+    diff against the expected `generate_series(since, until-delta, delta)`
+    and fetch only the missing candles.
+    """
+    stmt = select(OHLCV.ts).where(
+        OHLCV.exchange == exchange,
+        OHLCV.symbol == symbol,
+        OHLCV.timeframe == timeframe,
+        OHLCV.ts >= since,
+        OHLCV.ts < until,
+    )
+    result = await session.execute(stmt)
+    return {row[0] for row in result.all()}

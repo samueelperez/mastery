@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -23,7 +23,8 @@ from app.data.binance_adapter import EXCHANGE_NAME, BinanceAdapter
 from app.data.exchange_context import ExchangeContext
 from app.data.normalizer import timeframe_delta
 from app.db import session_scope
-from app.storage.ohlcv_repo import bulk_upsert, last_ts, upsert_one
+from app.observability.metrics import gap_fill_inserts_total, runtime_streams_alive
+from app.storage.ohlcv_repo import bulk_upsert, existing_ts_in_window, last_ts, upsert_one
 
 log = structlog.get_logger(__name__)
 
@@ -51,6 +52,14 @@ def get_watch_list() -> list[tuple[str, str]]:
 INITIAL_SEED_CANDLES = 1000
 
 
+# Ventana retrospectiva que `_fill_gap` escanea para detectar huecos
+# mid-history. `last_ts` solo cubre el agujero entre el último ts y now;
+# si una vela intermedia se perdió y luego llegó la siguiente, MAX(ts)
+# salta por encima y el hueco queda permanente sin esta ventana.
+# 500 candles cubre lo que el frontend renderiza (`limit=500`) + margen.
+LOOKBACK_GAP_SCAN_CANDLES = 500
+
+
 async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> None:
     channel = market_channel(exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe)
     log.info("ingest.watch.start", symbol=symbol, timeframe=timeframe, channel=channel)
@@ -58,6 +67,17 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
 
     while True:
         try:
+            # Antes de (re)suscribirse al WS, rellenar cualquier hueco creado
+            # por un disconnect previo. La primera iteración tras `start()`
+            # es no-op (gap_fill ya corrió allí); las siguientes tras una
+            # reconexión sí rellenan las velas cerradas durante el blackout.
+            # bulk_upsert es idempotente, así que solapar con start() es safe.
+            # `phase='reconnect'` distingue en métricas de la pasada de startup
+            # (cualquier insert >0 mid-runtime indica WS inestable).
+            with contextlib.suppress(Exception):
+                await _fill_gap(
+                    adapter, symbol, timeframe, phase="reconnect"
+                )
             async for candle in adapter.watch_ohlcv(symbol, timeframe):
                 # Always publish: subscribers get every tick of the forming candle.
                 await publish_json(
@@ -97,20 +117,48 @@ async def _watch_loop(adapter: BinanceAdapter, symbol: str, timeframe: str) -> N
             await asyncio.sleep(2.0)  # backoff before reconnect
 
 
-async def _fill_gap(
-    adapter: BinanceAdapter, symbol: str, timeframe: str
-) -> int:
-    """Page-fetch any candles missing between the last persisted one and now.
+def _group_consecutive(timestamps: list[datetime], delta: timedelta) -> list[tuple[datetime, datetime]]:
+    """Agrupa `timestamps` ordenados en rangos `[start, end]` donde cada par
+    consecutivo está separado exactamente por `delta`. Devuelve tuplas (start, end).
 
-    Two scenarios:
-      - **Serie con histórico**: hueco entre `last_ts` y `floor_now`. Lo
-        rellenamos página a página.
-      - **Serie vacía** (e.g. símbolo recién añadido a WATCH_SYMBOLS): hacemos
-        seed inicial de `INITIAL_SEED_CANDLES` velas. Sin esto, hasta que
-        cierre la primera vela post-arranque, el chart frontend (limit=500)
-        recibe lista vacía. El backfill CLI sigue disponible para series
-        históricas multi-año; este seed sólo da contexto reciente útil para
-        UI + indicadores rápidos.
+    Para 5 missing ts contiguos devuelve un único range; para 3 missing seguidos
+    + 1 missing aislado más adelante devuelve dos ranges. Esto permite hacer
+    una sola `fetch_ohlcv_page` por cluster contiguo en vez de una por ts.
+    """
+    if not timestamps:
+        return []
+    ranges: list[tuple[datetime, datetime]] = []
+    start = prev = timestamps[0]
+    for ts in timestamps[1:]:
+        if ts == prev + delta:
+            prev = ts
+        else:
+            ranges.append((start, prev))
+            start = prev = ts
+    ranges.append((start, prev))
+    return ranges
+
+
+async def _fill_gap(
+    adapter: BinanceAdapter,
+    symbol: str,
+    timeframe: str,
+    *,
+    phase: str = "startup",
+) -> int:
+    """Page-fetch any candles missing in the recent window.
+
+    Tres escenarios:
+      - **Serie vacía** (símbolo recién añadido a WATCH_SYMBOLS): seed inicial
+        de `INITIAL_SEED_CANDLES` velas. Sin esto, hasta que cierre la primera
+        vela post-arranque, el chart frontend (limit=500) recibe lista vacía.
+      - **Tail gap** (API estuvo apagada / WS estaba desconectada al boot):
+        hueco entre `last_ts` y `floor_now`. Page-fetch desde `last_ts + delta`.
+      - **Mid-history gaps**: una vela perdida entre dos persistidas (WS drop
+        breve mid-runtime que `_watch_loop` no rellenó en su día). `last_ts`
+        salta sobre el hueco y nunca se ve. Escaneamos los últimos
+        `LOOKBACK_GAP_SCAN_CANDLES` ts esperados, diffeamos contra los
+        existentes en BD y fetcheamos solo los cluster contiguos faltantes.
 
     Returns the number of newly inserted candles.
     """
@@ -121,6 +169,8 @@ async def _fill_gap(
         latest = await last_ts(
             session, exchange=EXCHANGE_NAME, symbol=symbol, timeframe=timeframe
         )
+
+    # Empty series — seed flow.
     if latest is None:
         gap_start = floor_now - INITIAL_SEED_CANDLES * delta
         log.info(
@@ -131,35 +181,90 @@ async def _fill_gap(
             to=floor_now.isoformat(),
             candles=INITIAL_SEED_CANDLES,
         )
-    else:
-        # Next missing candle starts one delta after the last persisted one.
-        gap_start = latest + delta
-        if gap_start >= floor_now:
-            return 0  # no gap
-
+        cursor_ms = int(gap_start.timestamp() * 1000)
+        end_ms = int(floor_now.timestamp() * 1000)
+        inserted = 0
+        while cursor_ms < end_ms:
+            candles = await adapter.fetch_ohlcv_page(
+                symbol, timeframe, since_ms=cursor_ms, limit=1000
+            )
+            if not candles:
+                break
+            async with session_scope() as session:
+                inserted += await bulk_upsert(session, candles)
+            last_candle_ts = candles[-1].ts
+            new_cursor = int(last_candle_ts.timestamp() * 1000) + int(delta.total_seconds() * 1000)
+            if new_cursor <= cursor_ms:
+                break
+            cursor_ms = new_cursor
         log.info(
-            "ingest.gap_fill.start",
+            "ingest.gap_fill.done",
             symbol=symbol,
             timeframe=timeframe,
-            from_=gap_start.isoformat(),
-            to=floor_now.isoformat(),
+            inserted=inserted,
         )
-    cursor_ms = int(gap_start.timestamp() * 1000)
-    end_ms = int(floor_now.timestamp() * 1000)
+        if inserted > 0:
+            gap_fill_inserts_total.labels(
+                symbol=symbol, timeframe=timeframe, phase=phase
+            ).inc(inserted)
+        return inserted
+
+    # Non-empty series — find ALL missing ts in the lookback window.
+    window_start = floor_now - LOOKBACK_GAP_SCAN_CANDLES * delta
+    async with session_scope() as session:
+        existing = await existing_ts_in_window(
+            session,
+            exchange=EXCHANGE_NAME,
+            symbol=symbol,
+            timeframe=timeframe,
+            since=window_start,
+            until=floor_now,
+        )
+    # Expected timestamps: aligned to the timeframe grid via floor_to_timeframe(now).
+    # generate_series local en Python — `until=floor_now` se excluye porque la vela
+    # de "ahora" todavía no ha cerrado (los candles se persisten al cierre).
+    expected: list[datetime] = []
+    ts_cursor = window_start
+    while ts_cursor < floor_now:
+        expected.append(ts_cursor)
+        ts_cursor += delta
+    missing = sorted(ts for ts in expected if ts not in existing)
+    if not missing:
+        return 0
+
+    ranges = _group_consecutive(missing, delta)
+    log.info(
+        "ingest.gap_fill.start",
+        symbol=symbol,
+        timeframe=timeframe,
+        n_missing=len(missing),
+        n_ranges=len(ranges),
+        oldest=missing[0].isoformat(),
+        newest=missing[-1].isoformat(),
+    )
     inserted = 0
-    while cursor_ms < end_ms:
-        candles = await adapter.fetch_ohlcv_page(
-            symbol, timeframe, since_ms=cursor_ms, limit=1000
-        )
-        if not candles:
-            break
-        async with session_scope() as session:
-            inserted += await bulk_upsert(session, candles)
-        last_candle_ts = candles[-1].ts
-        new_cursor = int(last_candle_ts.timestamp() * 1000) + int(delta.total_seconds() * 1000)
-        if new_cursor <= cursor_ms:
-            break  # no progress; bail
-        cursor_ms = new_cursor
+    for range_start, range_end in ranges:
+        # Pedimos `limit` suficiente para cubrir el rango completo más margen.
+        # Binance permite hasta 1000 por call; rangos más largos se trocean.
+        range_candles = int((range_end - range_start) / delta) + 1
+        cursor_ms = int(range_start.timestamp() * 1000)
+        end_ms = int(range_end.timestamp() * 1000) + int(delta.total_seconds() * 1000)
+        remaining = range_candles
+        while cursor_ms < end_ms and remaining > 0:
+            page_limit = min(1000, remaining)
+            candles = await adapter.fetch_ohlcv_page(
+                symbol, timeframe, since_ms=cursor_ms, limit=page_limit
+            )
+            if not candles:
+                break
+            async with session_scope() as session:
+                inserted += await bulk_upsert(session, candles)
+            last_candle_ts = candles[-1].ts
+            new_cursor = int(last_candle_ts.timestamp() * 1000) + int(delta.total_seconds() * 1000)
+            if new_cursor <= cursor_ms:
+                break
+            cursor_ms = new_cursor
+            remaining -= len(candles)
 
     log.info(
         "ingest.gap_fill.done",
@@ -167,6 +272,10 @@ async def _fill_gap(
         timeframe=timeframe,
         inserted=inserted,
     )
+    if inserted > 0:
+        gap_fill_inserts_total.labels(
+            symbol=symbol, timeframe=timeframe, phase=phase
+        ).inc(inserted)
     return inserted
 
 
@@ -208,6 +317,7 @@ class LiveIngestion:
                 name=f"ingest:{symbol}:{tf}",
             )
             self._tasks.append(t)
+        runtime_streams_alive.set(len(self._tasks))
         log.info("ingest.start", n_streams=len(self._tasks))
 
     async def stop(self) -> None:
@@ -217,6 +327,7 @@ class LiveIngestion:
             with contextlib.suppress(asyncio.CancelledError):
                 await t
         self._tasks.clear()
+        runtime_streams_alive.set(0)
         if self._adapter is not None:
             await self._adapter.close()
             self._adapter = None

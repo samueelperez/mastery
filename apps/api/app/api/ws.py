@@ -25,7 +25,7 @@ from app.auth.session import (
     extract_session_token,
     lookup_user_id_for_token,
 )
-from app.broadcasting.pubsub import market_channel, subscribe
+from app.broadcasting.pubsub import market_channel, reviews_channel, subscribe
 from app.data.binance_adapter import EXCHANGE_NAME
 from app.db import session_scope
 
@@ -86,6 +86,49 @@ async def market_ws(
         raise
     except Exception as exc:
         log.warning("ws.error", channel=channel, error=str(exc))
+        with contextlib.suppress(Exception):
+            await websocket.close()
+
+
+@router.websocket("/ws/reviews")
+async def reviews_ws(websocket: WebSocket) -> None:
+    """Fan-out de TradeReviews automáticas. El review_dispatcher publica en
+    `reviews:user:{user_id}` cuando el review_agent emite un análisis post-
+    entry; este endpoint lo reenvía como `{type: 'trade_review', data: ...}`.
+
+    Canal separado de `/ws/alerts` para que el frontend pueda atar handlers
+    distintos (chat injection vs alert panel). Mismo patrón de auth.
+    """
+    user_id = await _ws_user_id(websocket)
+    if user_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        log.info("ws.reviews.unauth")
+        return
+    await websocket.accept()
+    channel = reviews_channel(user_id)
+    log.info("ws.reviews.connect", channel=channel, user_id=user_id)
+
+    try:
+        async with subscribe(channel) as pubsub:
+            await websocket.send_json({"type": "subscribed", "channel": channel})
+            while True:
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=30.0
+                )
+                if msg is None:
+                    await websocket.send_json({"type": "ping"})
+                    continue
+                if msg.get("type") != "message":
+                    continue
+                data = orjson.loads(msg["data"])
+                await websocket.send_json({"type": "trade_review", "data": data})
+    except WebSocketDisconnect:
+        log.info("ws.reviews.disconnect", channel=channel)
+    except asyncio.CancelledError:
+        log.info("ws.reviews.cancelled", channel=channel)
+        raise
+    except Exception as exc:
+        log.warning("ws.reviews.error", channel=channel, error=str(exc))
         with contextlib.suppress(Exception):
             await websocket.close()
 

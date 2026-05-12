@@ -40,6 +40,15 @@ def market_channel(*, exchange: str, symbol: str, timeframe: str) -> str:
     return f"mkt:{exchange}:{symbol.lower()}:k:{timeframe}"
 
 
+def reviews_channel(user_id: str) -> str:
+    """Fan-out de TradeReviews generadas por el review_agent al frontend.
+
+    Canal aparte de `alerts:user:*` para que el cliente decida con qué WS
+    handler ata cada uno (chat injection vs alert panel).
+    """
+    return f"reviews:user:{user_id}"
+
+
 async def publish_json(channel: str, payload: object) -> int:
     client = get_client()
     raw = orjson.dumps(payload).decode()

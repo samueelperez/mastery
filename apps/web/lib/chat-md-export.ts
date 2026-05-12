@@ -49,7 +49,7 @@ function describeFinalResult(
       `- direction: ${idea.direction}`,
       `- regime: ${idea.regime?.label ?? "?"}`,
       `- confidence: ${idea.confidence}`,
-      `- entry: ${idea.entry ?? "—"} · invalidation: ${idea.invalidation ?? "—"}`,
+      `- entry: ${idea.entry ?? "—"} · stop_loss: ${idea.stop_loss ?? "—"}`,
       `- targets: ${idea.targets.length} → ${idea.targets.map((t) => `${t.label}@${t.price}`).join(", ")}`,
       `- scenarios: ${idea.scenarios?.length ?? 0}`,
       `- position_size_pct: ${idea.position_size_pct ?? "—"} · leverage_x: ${idea.leverage_x ?? "—"}`,
