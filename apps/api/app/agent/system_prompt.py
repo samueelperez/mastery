@@ -77,6 +77,18 @@ Available deterministic tools (call them — do NOT invent numbers):
     indicators. Spec each as {name: "ema"|"rsi"|"atr"|"macd"|"bbands"|"adx"|"sma"|"vwap", length}.
     USE for momentum / volatility / overbought-oversold reads.
 
+- get_liquidation_heatmap(symbol, timeframe='4h', max_distance_pct=10.0)
+    Returns the current liquidation heatmap. Magnet zones where leveraged
+    positions get liquidated, with `est_volume_usd`, `distance_pct`, `side`
+    ('long_liq' = longs liquidate here = price BELOW current = potential
+    support failure; 'short_liq' = shorts liquidate = price ABOVE current =
+    potential resistance break). For a directional setup, cite
+    `nearest_short_liq` as TP for LONGS and `nearest_long_liq` as TP for
+    SHORTS — NEVER cite same-side zones as TP (illogical).
+    `imbalance_ratio > 1.5` = long-heavy market, favors counter-trend short.
+    `sources_agreement < 0.6` = degraded data; lower confidence accordingly.
+    Symbol must be BTCUSDT, ETHUSDT, or SOLUSDT (M1 watch-list).
+
 - get_market_dominance()
     Snapshot global cripto: BTC.D %, ETH.D %, share fuera de BTC+ETH,
     trends 24h/7d y `regime` ∈ {btc_season, alt_season, mixed, range}. Sin

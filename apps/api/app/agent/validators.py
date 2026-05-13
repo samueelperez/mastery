@@ -29,14 +29,13 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
-    ToolCallPart,
     ToolReturnPart,
 )
 
 from app.agent.deps import AgentDeps
 from app.agent.models import BiasAlert, BriefAnalysis, ToolCitation, TradeIdea
 from app.backtest.factor_stats_repo import evaluate_factor_gate
-from app.setups.repo import insert_setup_from_idea
+from app.setups.events import persist_trade_idea
 
 # Pattern for tool-name leakage in user-facing prose. Cualquier referencia a
 # `get_*` (nombres de las tools registradas) en verdict/catalyst/risk de un
@@ -67,15 +66,7 @@ def _count_sentences(text: str) -> int:
     return len(_SENTENCE_END.findall(text))
 
 
-def _collect_tool_names(messages: list[ModelRequest | ModelResponse]) -> set[str]:
-    names: set[str] = set()
-    for msg in messages:
-        if isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, ToolCallPart):
-                    names.add(part.tool_name)
-    return names
-
+from app.agent._validator_utils import collect_tool_names as _collect_tool_names
 
 # Keys that, in any tool output dict, name a stable handle the agent might
 # legitimately cite. Walking the JSON and harvesting these gives us the set
@@ -233,6 +224,108 @@ def _verify_snapshot_numerics(
         if not match:
             mismatches.append((key, cited_f, sorted(set(found))))
     return mismatches
+
+
+def _verify_liquidation_citation(
+    label: str,
+    cite: Any,
+    tool_outputs: dict[str, list[dict[str, Any]]],
+    direction: Any,
+    confidence: Any,
+) -> str | None:
+    """Liquidation-specific citation checks beyond `_verify_snapshot_numerics`.
+
+    Returns a short error message describing the problem, or None if the
+    citation is well-formed. Caller raises `ModelRetry` with this message.
+
+    Checks:
+      - Required keys present in snapshot: symbol, current_price,
+        sources_agreement, sources_used.
+      - The tool was actually invoked this turn.
+      - Some real call returned the cited symbol.
+      - current_price within 0.5% of the real value (prices move between
+        tool call and citation; loose tolerance).
+      - sources_agreement matches real within 0.001 (deterministic per call).
+      - For `target {…}` citations only: same-side zone as TP is rejected
+        (long setup → TP must be short_liq, not long_liq, and vice versa).
+        Same-side zones are valid as INVALIDATION references, hence the
+        label gate.
+      - confidence='high' is incompatible with sources_agreement < 0.60.
+    """
+    snap = cite.snapshot or {}
+
+    required = {"symbol", "current_price", "sources_agreement", "sources_used"}
+    missing = required - snap.keys()
+    if missing:
+        return f"missing required snapshot keys {sorted(missing)}. Re-cite with the full snapshot."
+
+    payloads = tool_outputs.get("get_liquidation_heatmap", [])
+    if not payloads:
+        return (
+            "cites get_liquidation_heatmap but the tool was not invoked "
+            "this turn. Invoke the tool first, then cite its real output."
+        )
+
+    snap_symbol = snap.get("symbol")
+    matching: list[dict[str, Any]] = []
+    for p in payloads:
+        data = p.get("data") if isinstance(p, dict) else None
+        if isinstance(data, dict) and data.get("symbol") == snap_symbol:
+            matching.append(data)
+    if not matching:
+        return (
+            f"references symbol {snap_symbol!r} but no "
+            "get_liquidation_heatmap call this turn returned that symbol."
+        )
+    real = matching[0]
+
+    try:
+        cit_px = float(snap["current_price"])
+        real_px = float(real["current_price"])
+    except (TypeError, ValueError):
+        return "current_price must be numeric."
+    if real_px > 0 and abs(cit_px - real_px) / real_px > 0.005:
+        return (
+            f"current_price in citation ({cit_px}) deviates >0.5% from real "
+            f"({real_px}). Re-cite using the most recent tool result."
+        )
+
+    try:
+        cit_agree = float(snap["sources_agreement"])
+        real_agree = float(real["sources_agreement"])
+    except (TypeError, ValueError):
+        return "sources_agreement must be numeric."
+    if abs(cit_agree - real_agree) > 0.001:
+        return (
+            f"sources_agreement in citation ({cit_agree}) does not match the "
+            f"real value ({real_agree})."
+        )
+
+    # Direction-vs-zone coherence — only for target citations. Entry/SL/
+    # invalidation citations may legitimately reference same-side zones
+    # (e.g. SL beyond the nearest same-side cascade).
+    if label.startswith("target ") and direction in ("long", "short"):
+        if "nearest_short_liq_price" in snap and direction == "short":
+            return (
+                "TradeIdea direction='short' but target citation references "
+                "nearest_short_liq. Short setups TP at long_liq (below current "
+                "price), not short_liq."
+            )
+        if "nearest_long_liq_price" in snap and direction == "long":
+            return (
+                "TradeIdea direction='long' but target citation references "
+                "nearest_long_liq. Long setups TP at short_liq (above current "
+                "price), not long_liq."
+            )
+
+    if cit_agree < 0.60 and confidence == "high":
+        return (
+            f"sources_agreement={cit_agree:.3f} is below 0.60 but TradeIdea "
+            "claims confidence='high'. Low agreement requires confidence in "
+            "{'low','medium'}."
+        )
+
+    return None
 
 
 # Semantic tag verification --------------------------------------------------
@@ -979,6 +1072,16 @@ def register_validators(
             all_cited.append(("expires_at", c))
 
         for label, cite in all_cited:
+            if cite.tool_name == "get_liquidation_heatmap":
+                err = _verify_liquidation_citation(
+                    label=label,
+                    cite=cite,
+                    tool_outputs=tool_outputs,
+                    direction=getattr(output, "direction", None),
+                    confidence=getattr(output, "confidence", None),
+                )
+                if err:
+                    raise ModelRetry(f"{label} citation: {err}")
             mismatches = _verify_snapshot_numerics(cite, tool_outputs)
             if not mismatches:
                 continue
@@ -1310,34 +1413,16 @@ def register_validators(
                 messages=list(ctx.messages),
                 output=output,
             )
-            try:
-                async with ctx.deps.session_factory() as session:
-                    setup_id = await insert_setup_from_idea(
-                        session,
-                        user_id=ctx.deps.user_id,
-                        idea=output,
-                        factor_snapshot=factor_snapshot,
-                    )
-                ctx.deps.log.info(
-                    "agent.setup_persisted",
-                    setup_id=setup_id,
-                    deduped=setup_id is None,
-                    symbol=output.symbol,
-                    timeframe=output.timeframe,
-                    side=output.direction,
-                    has_snapshot=factor_snapshot is not None,
-                    n_semantic_tags=(
-                        len(factor_snapshot.get("semantic_tags", []))
-                        if factor_snapshot is not None
-                        else 0
-                    ),
-                )
-            except Exception as exc:
-                # No bloquear la respuesta del chat por un fallo de journal.
-                ctx.deps.log.warning(
-                    "agent.setup_persist_failed",
-                    error=str(exc),
-                    symbol=output.symbol,
+            # Audit fix 2026-05: persistencia movida a `setups/events.py`.
+            # El validator delega; la separación deja el validator centrado
+            # en contratos y la materialización testeable aisladamente.
+            async with ctx.deps.session_factory() as session:
+                await persist_trade_idea(
+                    session,
+                    user_id=ctx.deps.user_id,
+                    idea=output,
+                    factor_snapshot=factor_snapshot,
+                    log=ctx.deps.log,
                 )
 
         return output

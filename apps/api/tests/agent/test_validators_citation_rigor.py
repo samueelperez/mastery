@@ -507,3 +507,195 @@ async def test_semantic_tag_lvn_without_volume_profile_tool_degrades() -> None:
     idea = _baseline_idea(semantic_tags=["lvn_resistance"], confidence="high")
     out = await validator(ctx, idea)
     assert out.confidence == "medium"
+
+
+# ----------------------------------------------------------------------------
+# Liquidation heatmap citation contract (Cerebro 1 — Day 5)
+# ----------------------------------------------------------------------------
+
+
+def _liquidation_payload(
+    *,
+    symbol: str = "BTCUSDT",
+    current_price: float = 100.0,
+    sources_agreement: float = 0.90,
+    sources_used: tuple[str, ...] = ("A_derived", "B_hyperliquid"),
+    nearest_short_liq_price: float | None = 102.5,
+    nearest_long_liq_price: float | None = 97.5,
+) -> dict[str, Any]:
+    """Shape returned by `get_liquidation_heatmap`'s ToolResult.
+
+    Mirrors `HeatmapSnapshot` keys at the top of `data`.
+    """
+    return {
+        "data": {
+            "symbol": symbol,
+            "timeframe": "4h",
+            "current_price": current_price,
+            "as_of": "2026-05-13T12:00:00Z",
+            "magnet_zones": [],
+            "nearest_long_liq": (
+                {
+                    "price_low": nearest_long_liq_price - 0.1,
+                    "price_high": nearest_long_liq_price + 0.1,
+                    "side": "long_liq",
+                    "est_volume_usd": 1_000_000,
+                    "distance_pct": -2.5,
+                    "confidence": "medium",
+                }
+                if nearest_long_liq_price is not None
+                else None
+            ),
+            "nearest_short_liq": (
+                {
+                    "price_low": nearest_short_liq_price - 0.1,
+                    "price_high": nearest_short_liq_price + 0.1,
+                    "side": "short_liq",
+                    "est_volume_usd": 1_000_000,
+                    "distance_pct": 2.5,
+                    "confidence": "medium",
+                }
+                if nearest_short_liq_price is not None
+                else None
+            ),
+            "imbalance_ratio": 1.0,
+            "cluster_density": 0.5,
+            "sources_used": list(sources_used),
+            "sources_agreement": sources_agreement,
+        },
+        "provenance": {"source": "liquidation_heatmap_engine", "warnings": []},
+    }
+
+
+@pytest.mark.asyncio
+async def test_validator_rejects_phantom_liquidation_zone() -> None:
+    """Citation to get_liquidation_heatmap but the tool was NOT called →
+    the existing tool-name gate catches it (ModelRetry)."""
+    validator = _capture_validator()
+    ctx = _make_ctx(
+        [
+            ("get_multi_tf_confluence", _multi_tf_confluence_payload()),
+            ("get_market_structure", _market_structure_payload(current_close=100.0)),
+            # get_liquidation_heatmap intentionally absent
+        ]
+    )
+    idea = _baseline_idea(
+        target_citations=[
+            ToolCitation(
+                tool_name="get_liquidation_heatmap",
+                snapshot={
+                    "symbol": "BTCUSDT",
+                    "current_price": 100.0,
+                    "sources_agreement": 0.90,
+                    "sources_used": ["A_derived", "B_hyperliquid"],
+                    "nearest_short_liq_price": 102.5,
+                },
+            )
+        ],
+    )
+    with pytest.raises(ModelRetry) as excinfo:
+        await validator(ctx, idea)
+    msg = str(excinfo.value)
+    assert "get_liquidation_heatmap" in msg
+    assert "NOT call" in msg or "not invoked" in msg
+
+
+@pytest.mark.asyncio
+async def test_validator_rejects_mismatched_agreement() -> None:
+    """Citation claims sources_agreement=0.50 but real is 0.90 → reject."""
+    validator = _capture_validator()
+    ctx = _make_ctx(
+        [
+            ("get_multi_tf_confluence", _multi_tf_confluence_payload()),
+            ("get_market_structure", _market_structure_payload(current_close=100.0)),
+            (
+                "get_liquidation_heatmap",
+                _liquidation_payload(sources_agreement=0.90),
+            ),
+        ]
+    )
+    idea = _baseline_idea(
+        target_citations=[
+            ToolCitation(
+                tool_name="get_liquidation_heatmap",
+                snapshot={
+                    "symbol": "BTCUSDT",
+                    "current_price": 100.0,
+                    "sources_agreement": 0.50,  # wrong: real is 0.90
+                    "sources_used": ["A_derived", "B_hyperliquid"],
+                    "nearest_short_liq_price": 102.5,
+                },
+            )
+        ],
+    )
+    with pytest.raises(ModelRetry) as excinfo:
+        await validator(ctx, idea)
+    assert "sources_agreement" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_validator_rejects_incoherent_confidence_liquidation() -> None:
+    """confidence='high' with sources_agreement<0.60 is incoherent → reject."""
+    validator = _capture_validator()
+    ctx = _make_ctx(
+        [
+            ("get_multi_tf_confluence", _multi_tf_confluence_payload()),
+            ("get_market_structure", _market_structure_payload(current_close=100.0)),
+            (
+                "get_liquidation_heatmap",
+                _liquidation_payload(sources_agreement=0.50),
+            ),
+        ]
+    )
+    idea = _baseline_idea(
+        confidence="high",
+        target_citations=[
+            ToolCitation(
+                tool_name="get_liquidation_heatmap",
+                snapshot={
+                    "symbol": "BTCUSDT",
+                    "current_price": 100.0,
+                    "sources_agreement": 0.50,
+                    "sources_used": ["A_derived", "B_hyperliquid"],
+                    "nearest_short_liq_price": 102.5,
+                },
+            )
+        ],
+    )
+    with pytest.raises(ModelRetry) as excinfo:
+        await validator(ctx, idea)
+    msg = str(excinfo.value)
+    assert "confidence" in msg or "sources_agreement" in msg
+
+
+@pytest.mark.asyncio
+async def test_validator_rejects_same_side_tp_liquidation() -> None:
+    """Long setup with target citation referencing nearest_long_liq_price →
+    reject (a long should TP at short_liq above, not long_liq below)."""
+    validator = _capture_validator()
+    ctx = _make_ctx(
+        [
+            ("get_multi_tf_confluence", _multi_tf_confluence_payload()),
+            ("get_market_structure", _market_structure_payload(current_close=100.0)),
+            ("get_liquidation_heatmap", _liquidation_payload()),
+        ]
+    )
+    idea = _baseline_idea(
+        target_citations=[
+            ToolCitation(
+                tool_name="get_liquidation_heatmap",
+                snapshot={
+                    "symbol": "BTCUSDT",
+                    "current_price": 100.0,
+                    "sources_agreement": 0.90,
+                    "sources_used": ["A_derived", "B_hyperliquid"],
+                    # WRONG: long setup citing nearest_long_liq as TP.
+                    "nearest_long_liq_price": 97.5,
+                },
+            )
+        ],
+    )
+    with pytest.raises(ModelRetry) as excinfo:
+        await validator(ctx, idea)
+    msg = str(excinfo.value)
+    assert "direction" in msg or "long_liq" in msg or "TP" in msg
