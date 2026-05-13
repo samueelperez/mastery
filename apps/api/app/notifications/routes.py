@@ -17,6 +17,7 @@ constant-time-compares against `Settings.telegram_webhook_secret`.
 
 from __future__ import annotations
 
+import asyncio
 from secrets import compare_digest
 from typing import Annotated, Any
 
@@ -57,9 +58,7 @@ async def issue_bind_code(
         )
     code = await bind_flow.issue_bind_code(user_id)
     bot_username = await _resolve_bot_username()
-    deep_link = (
-        f"https://t.me/{bot_username}?start={code}" if bot_username else None
-    )
+    deep_link = f"https://t.me/{bot_username}?start={code}" if bot_username else None
     return {
         "code": code,
         "ttl_seconds": settings.telegram_bind_code_ttl_seconds,
@@ -181,9 +180,7 @@ async def _handle_message(message: dict[str, Any]) -> None:
             )
             return
         async with session_scope() as session:
-            await set_telegram_chat_id(
-                session, user_id=user_id, chat_id=chat_id
-            )
+            await set_telegram_chat_id(session, user_id=user_id, chat_id=chat_id)
         await tg.send_text(
             chat_id,
             "✅ Cuenta vinculada. Te enviaré aquí las propuestas del scout "
@@ -195,8 +192,7 @@ async def _handle_message(message: dict[str, Any]) -> None:
     # Anything else: gentle nudge.
     await tg.send_text(
         chat_id,
-        "Para vincular tu cuenta usa `/start <CODIGO>` con el código que "
-        "obtienes en la app.",
+        "Para vincular tu cuenta usa `/start <CODIGO>` con el código que obtienes en la app.",
     )
 
 
@@ -211,6 +207,44 @@ async def _handle_callback(cb: dict[str, Any]) -> None:
 
     if not data or ":" not in data or not chat_id:
         await tg.answer_callback(callback_id, "Botón no reconocido")
+        return
+
+    # Ground-truth (Cerebro 1) is a 3-part prefix: `gt:<verdict>:<setup>`.
+    # Handle it before the generic 2-part split so the verdict survives.
+    if data.startswith("gt:"):
+        parts = data.split(":", 2)
+        if len(parts) != 3:
+            await tg.answer_callback(callback_id, "Callback GT malformado")
+            return
+        _, verdict, gt_setup_id = parts
+        user_id_gt = await _resolve_user_from_chat(chat_id)
+        if user_id_gt is None:
+            await tg.answer_callback(
+                callback_id,
+                "Chat no vinculado — usa /start <CODIGO> primero",
+            )
+            return
+        from app.liquidation.telegram_handlers import record_ground_truth
+
+        try:
+            ok = await record_ground_truth(
+                session_factory=session_scope,
+                user_id=user_id_gt,
+                setup_id=gt_setup_id,
+                verdict=verdict,
+            )
+        except Exception as exc:
+            log.exception(
+                "telegram.gt.error",
+                error=f"{type(exc).__name__}: {exc}",
+                setup_id=gt_setup_id,
+                verdict=verdict,
+            )
+            ok = False
+        await tg.answer_callback(
+            callback_id,
+            f"OK ({verdict})" if ok else "GT no registrado",
+        )
         return
 
     action, setup_id = data.split(":", 1)
@@ -256,33 +290,50 @@ async def _handle_callback(cb: dict[str, Any]) -> None:
 
 
 _bot_username_cache: str | None = None
+# asyncio.Lock para evitar getMe concurrentes en el primer hit tras boot
+# (audit fix 2026-05). Antes N requests simultáneas hacían N llamadas a
+# Telegram hasta que la primera ganaba el race del cache.
+_bot_username_lock: asyncio.Lock | None = None
+
+
+def _get_bot_username_lock() -> asyncio.Lock:
+    global _bot_username_lock
+    if _bot_username_lock is None:
+        _bot_username_lock = asyncio.Lock()
+    return _bot_username_lock
 
 
 async def _resolve_bot_username() -> str | None:
     """Calls Telegram `getMe` once and caches the username. Used to render
-    a clickable deep link in the bind-code response."""
+    a clickable deep link in the bind-code response. Thread-safe via lock
+    (audit fix 2026-05)."""
     global _bot_username_cache
     if _bot_username_cache is not None:
         return _bot_username_cache
-    base = (
-        f"https://api.telegram.org/bot{get_settings().telegram_bot_token}"
-        if get_settings().telegram_bot_token
-        else None
-    )
-    if base is None:
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{base}/getMe")
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("ok"):
-                username = data.get("result", {}).get("username")
-                if isinstance(username, str):
-                    _bot_username_cache = username
-                    return username
-    except httpx.HTTPError as exc:
-        log.warning("telegram.getme.failed", error=str(exc))
+    async with _get_bot_username_lock():
+        # Double-check inside lock — alguien pudo poblar el cache
+        # mientras esperábamos el lock.
+        if _bot_username_cache is not None:
+            return _bot_username_cache
+        base = (
+            f"https://api.telegram.org/bot{get_settings().telegram_bot_token}"
+            if get_settings().telegram_bot_token
+            else None
+        )
+        if base is None:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{base}/getMe")
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("ok"):
+                    username = data.get("result", {}).get("username")
+                    if isinstance(username, str):
+                        _bot_username_cache = username
+                        return username
+        except httpx.HTTPError as exc:
+            log.warning("telegram.getme.failed", error=str(exc))
     return None
 
 

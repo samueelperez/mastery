@@ -50,6 +50,20 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
 
+    # ---- Main agent model config (audit fix 2026-05) -----------------------
+    # Antes hardcoded en agent.py — promovido a Settings para poder tunear
+    # max_tokens / thinking / retries sin re-deploy ni redeploy de imagen.
+    agent_max_tokens: int = Field(default=24000, alias="AGENT_MAX_TOKENS")
+    agent_thinking: str = Field(default="medium", alias="AGENT_THINKING")
+    agent_retries: int = Field(default=2, alias="AGENT_RETRIES")
+
+    # ---- DB pool config (audit fix 2026-05) -------------------------------
+    db_pool_size: int = Field(default=10, alias="DB_POOL_SIZE")
+    db_pool_max_overflow: int = Field(default=5, alias="DB_POOL_MAX_OVERFLOW")
+    # `pool_recycle` evita conexiones stale en hosts que cierran idle (Neon,
+    # Supabase free tier). 1800s = 30min. -1 = no recycle (SQLAlchemy default).
+    db_pool_recycle_s: int = Field(default=1800, alias="DB_POOL_RECYCLE_S")
+
     # LLM provider — F1 chat agent. Pydantic AI's OpenRouterProvider reads this
     # directly from the env, but we surface it on Settings so /health can flag a
     # missing key cleanly and tests can override it.
@@ -93,6 +107,9 @@ class Settings(BaseSettings):
     review_price_cache_read_per_m_usd: float = Field(
         default=0.3, alias="REVIEW_PRICE_CACHE_READ_PER_M_USD"
     )
+    # Hard timeout on agent.run() — sin esto, una OpenRouter colgada bloquea
+    # un slot del semáforo indefinidamente. Audit fix 2026-05.
+    review_timeout_s: float = Field(default=90.0, alias="REVIEW_TIMEOUT_S")
 
     # ---- Post-Mortem (F5.5 — análisis terminal + feedback loop) ----------
     # Master flag del subsistema. Default False: el dispatcher es no-op hasta
@@ -116,6 +133,23 @@ class Settings(BaseSettings):
     # del feedback loop). Determinista por hash(trade_id || user_id).
     holdout_pct: int = Field(default=15, alias="HOLDOUT_PCT")
 
+    # ---- F4 — Paper trading engine -----------------------------------------
+    # Master flag. Default False — entry/exit en setups/runtime persiste los
+    # transitions pero NO toca paper_positions. Activar tras smoke test.
+    paper_trading_enabled: bool = Field(default=False, alias="PAPER_TRADING_ENABLED")
+    # Equity inicial por user al hacer init_balance. Configurable para tests.
+    paper_initial_equity_usd: float = Field(
+        default=10_000.0, alias="PAPER_INITIAL_EQUITY_USD"
+    )
+    # Taker fee bps por defecto (Binance USDT-M = 4 bps = 0.04%). Aplicado
+    # tanto en entry como en exit. Migrar a per-exchange en F4.1.
+    paper_taker_fee_bps: float = Field(default=4.0, alias="PAPER_TAKER_FEE_BPS")
+    # Spread por defecto cuando no hay L1 orderbook ingestor (F4.0). Override
+    # cuando F4.1 cablee real spread depth.
+    paper_default_spread_pct: float = Field(
+        default=0.02, alias="PAPER_DEFAULT_SPREAD_PCT"
+    )
+
     # ---- C.3 — Telegram bot ------------------------------------------------
     # When TELEGRAM_BOT_TOKEN is empty (default) the notifications module
     # silently degrades — endpoints return 503 / scout_dispatcher logs and
@@ -136,6 +170,15 @@ class Settings(BaseSettings):
     # TTL for the one-time bind code that links a Telegram chat to a user.
     telegram_bind_code_ttl_seconds: int = Field(
         default=600, alias="TELEGRAM_BIND_CODE_TTL_SECONDS"
+    )
+
+    # Cerebro 1 (Day 6): when True, setup alerts include 3 ground-truth
+    # buttons (✅ agree / ⚠️ close / ❌ disagree) for TradingDifferent manual
+    # validation. Disable at the start of M2 once weights have been
+    # calibrated (~4 weeks of data). Toggling it back on in M3+ is the
+    # escape hatch if the system drifts.
+    ground_truth_collection_enabled: bool = Field(
+        default=True, alias="GROUND_TRUTH_COLLECTION_ENABLED"
     )
 
     # ---- B.2 — Slippage buffer (pre-trade R:R gate) -----------------------
