@@ -193,6 +193,68 @@ class Settings(BaseSettings):
     approval_timeout_seconds: int = Field(
         default=600, alias="APPROVAL_TIMEOUT_SECONDS"
     )
+
+    # ---- M1-Risk — deterministic risk gates ---------------------------------
+    # Source of truth for the 13 hard-gate constants declared in
+    # `docs/cerebro1/CLAUDE.md::<money_and_risk_constants>`. Every gate
+    # implementation in `app/risk/gates.py` reads from here — never hardcode
+    # a threshold inline.
+    #
+    # Sizing inputs (used in position size calc, not as reject gates).
+    risk_per_trade_pct: float = Field(
+        default=0.75, alias="RISK_PER_TRADE_PCT"
+    )
+    # Per-position cap. Setup rejected if leverage_x exceeds this; sizing
+    # may further reduce when capital fits a smaller leverage.
+    max_leverage_per_position: float = Field(
+        default=3.0, alias="MAX_LEVERAGE_PER_POSITION"
+    )
+    # Portfolio-level gross leverage cap. Sum of (size_usd * leverage) across
+    # open positions must stay ≤ equity * this multiple.
+    max_gross_leverage: float = Field(
+        default=1.5, alias="MAX_GROSS_LEVERAGE"
+    )
+    # Realized loss in 24h that triggers a system freeze. Breach pauses all
+    # new setups for 24h via the alerts cooldown layer.
+    daily_loss_limit_pct: float = Field(
+        default=3.0, alias="DAILY_LOSS_LIMIT_PCT"
+    )
+    # Hard circuit breaker — equity drawdown from high-watermark. Breach
+    # requires manual unlock (a Settings flag or a /admin/reset_drawdown call).
+    max_drawdown_circuit_pct: float = Field(
+        default=10.0, alias="MAX_DRAWDOWN_CIRCUIT_PCT"
+    )
+    # Bias cooldown thresholds. Current cooldown.py uses 2h / 6h hardcoded —
+    # PR-RM-2 will migrate it to read these settings. Spec defaults match
+    # CLAUDE.md (4h after 2 consecutive SL, 24h after 3).
+    cooldown_sl_streak_2_hours: int = Field(
+        default=4, alias="COOLDOWN_SL_STREAK_2_HOURS"
+    )
+    cooldown_sl_streak_3_hours: int = Field(
+        default=24, alias="COOLDOWN_SL_STREAK_3_HOURS"
+    )
+    # R:R cap. Pre-slippage; the effective threshold = this + per-symbol
+    # slippage buffer (see `slippage_buffer_r`).
+    min_rr_ratio: float = Field(default=1.5, alias="MIN_RR_RATIO")
+    # Factor gate — Bayesian Beta-Binomial 5th-percentile floor.
+    min_factor_lcb: float = Field(default=0.42, alias="MIN_FACTOR_LCB")
+    # Expectancy gate — min R-multiple expectancy LCB for the factor mix.
+    min_expectancy_lcb_r: float = Field(
+        default=0.25, alias="MIN_EXPECTANCY_LCB_R"
+    )
+    # Beta prior for the factor win-rate posterior. Spec asks for 2.0/2.5;
+    # `app/backtest/factor_stats_repo.py` currently hardcodes 2.0/2.0. The
+    # deviation is tracked — once Settings are wired into factor_stats_repo
+    # (PR-RM-2 follow-up), bumping beta to 2.5 is a one-line config flip.
+    bayesian_prior_alpha: float = Field(
+        default=2.0, alias="BAYESIAN_PRIOR_ALPHA"
+    )
+    bayesian_prior_beta: float = Field(default=2.0, alias="BAYESIAN_PRIOR_BETA")
+    # News blackout window (minutes ± high-impact event timestamp).
+    # M1-Risk: gate exists but feed is best-effort; M2 wires CryptoPanic.
+    news_blackout_minutes: int = Field(
+        default=15, alias="NEWS_BLACKOUT_MINUTES"
+    )
     # Auto-approve gate. When a scout-proposed TradeIdea cites a heatmap zone
     # with very high cross-provider agreement AND already passes every hard
     # gate (R:R, slippage, factor LCB), bypass the human-in-loop step. The
