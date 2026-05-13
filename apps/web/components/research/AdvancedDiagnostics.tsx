@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import type { BacktestRunDetailDTO, StrategyMetricsDTO } from "@/lib/api"
+import type { BacktestRunDetailDTO, StrategyMetricsDTO } from "@/lib/core/api"
 
 interface AdvancedDiagnosticsProps {
   run: BacktestRunDetailDTO

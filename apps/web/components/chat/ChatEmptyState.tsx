@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 
 import { BrandMark } from "@/components/nav/BrandMark"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 interface ChatEmptyStateProps {
   onSuggestion: (text: string) => void

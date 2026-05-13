@@ -13,7 +13,7 @@ import {
   deleteAlert,
   patchAlert,
   type AlertRuleDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 
 type StatusFilter = "all" | "enabled" | "disabled"
 

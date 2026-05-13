@@ -12,13 +12,13 @@ import {
   type ConfluenceMapDTO,
   type MarketStructureDTO,
   type IndicatorPanelDTO,
-} from "@/lib/agent-outputs"
+} from "@/lib/agent/outputs"
 import {
   isBriefAnalysis,
   isTradeIdea,
   type TradeIdea,
   type Timeframe,
-} from "@/lib/chat-types"
+} from "@/lib/chat/types"
 import {
   isTimeframe,
   isWatchSymbol,
@@ -233,11 +233,11 @@ function extractOverlays(
         console.debug(tag, "rejected: direction=no_trade", { symbol })
         continue
       }
-      if (idea.entry === null || idea.invalidation === null) {
-        console.debug(tag, "rejected: entry|invalidation null", {
+      if (idea.entry === null || idea.stop_loss === null) {
+        console.debug(tag, "rejected: entry|stop_loss null", {
           symbol,
           entry: idea.entry,
-          invalidation: idea.invalidation,
+          stop_loss: idea.stop_loss,
         })
         continue
       }
@@ -250,7 +250,7 @@ function extractOverlays(
         id: placeholderId,
         direction: idea.direction,
         entry: idea.entry,
-        stopLoss: idea.invalidation,
+        stopLoss: idea.stop_loss,
         targets: idea.targets.map((t) => ({ label: t.label, price: t.price })),
         tf: idea.timeframe,
       })
@@ -258,7 +258,7 @@ function extractOverlays(
         symbol,
         id: placeholderId,
         entry: idea.entry,
-        sl: idea.invalidation,
+        sl: idea.stop_loss,
         targets: idea.targets.length,
       })
       continue

@@ -2,8 +2,8 @@
 
 import { AlertTriangleIcon } from "lucide-react"
 
-import { toolLabel } from "@/lib/tool-labels"
-import { cn } from "@/lib/utils"
+import { toolLabel } from "@/lib/chat/tool-labels"
+import { cn } from "@/lib/core/utils"
 
 interface ToolErrorBannerProps {
   toolName: string

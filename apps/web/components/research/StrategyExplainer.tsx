@@ -9,7 +9,7 @@ import {
 import type {
   BacktestRunDetailDTO,
   StrategyRegistryDTO,
-} from "@/lib/api"
+} from "@/lib/core/api"
 
 interface StrategyExplainerProps {
   run: BacktestRunDetailDTO

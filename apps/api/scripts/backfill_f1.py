@@ -12,7 +12,7 @@ import asyncio
 
 import structlog
 
-from app.ingestion.backfill import _run
+from app.market.ohlcv.backfill import _run
 
 log = structlog.get_logger(__name__)
 

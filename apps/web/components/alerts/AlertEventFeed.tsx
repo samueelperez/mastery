@@ -6,14 +6,14 @@ import { useMemo } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { formatTimeAgo } from "@/lib/format"
-import { cn } from "@/lib/utils"
+import { formatTimeAgo } from "@/lib/core/format"
+import { cn } from "@/lib/core/utils"
 import {
   type AlertEventDTO,
   fetchAlertEvents,
   markEventSeen,
-} from "@/lib/api"
-import { type AlertEventPayload } from "@/lib/ws"
+} from "@/lib/core/api"
+import { type AlertEventPayload } from "@/lib/core/ws"
 
 interface AlertEventFeedProps {
   liveEvents: AlertEventPayload[]

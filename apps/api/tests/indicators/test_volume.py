@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from datetime import UTC, datetime, timedelta
 
-from app.indicators.volume import vwap
+from app.market.indicators.volume import vwap
 from tests.indicators.conftest import make_lf
 
 

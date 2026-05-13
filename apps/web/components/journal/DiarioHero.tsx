@@ -3,8 +3,8 @@
 import { FlameIcon, MinusIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { Streak, WeekStats } from "@/lib/journal-rollup"
-import { cn } from "@/lib/utils"
+import type { Streak, WeekStats } from "@/lib/journal/rollup"
+import { cn } from "@/lib/core/utils"
 
 interface DiarioHeroProps {
   weekStats: WeekStats

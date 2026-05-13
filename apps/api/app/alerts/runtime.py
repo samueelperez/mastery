@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,14 +33,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.tools._time import floor_to_timeframe
 from app.alerts.dsl import RuleSpec
 from app.alerts.evaluator import build_snapshot, evaluate_rule
-from app.broadcasting.pubsub import market_channel, publish_json, subscribe
-from app.config import get_settings
-from app.data.binance_adapter import EXCHANGE_NAME
-from app.db import session_scope
-from app.indicators import IndicatorSpec, compute_panel
-from app.ingestion.live_klines import get_watch_list
+from app.alerts.panel_service import compute_panel_for_specs
+from app.core.broadcasting.pubsub import market_channel, publish_json, subscribe
+from app.core.config import get_settings
+from app.core.db import session_scope
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
+from app.market.ohlcv.ingestion_live import get_watch_list
 
 log = structlog.get_logger(__name__)
+
+# Scout dispatcher fire-and-forget tasks. Holding strong refs prevents GC
+# from killing in-flight agent invocations. Cleared by done-callback.
+_SCOUT_TASKS: set[asyncio.Task[Any]] = set()
 
 
 def alerts_channel(user_id: str) -> str:
@@ -78,7 +81,7 @@ async def _fetch_active_rules(
             text(
                 """
                 SELECT id::text, user_id, name, spec, cooldown_s, last_fired_at,
-                       updated_at
+                       updated_at, is_scout_trigger
                 FROM alert_rules
                 WHERE enabled = true
                   AND spec->>'symbol' = :sym
@@ -89,25 +92,6 @@ async def _fetch_active_rules(
         )
     ).mappings().all()
     return [dict(r) for r in rows]
-
-
-def _max_lookback(specs: Iterable[IndicatorSpec]) -> int:
-    """The panel needs max(spec.length) × 3 rows to warm up indicators (Wilder
-    smoothing on RSI/ATR/ADX needs ~2× length, plus headroom for cross_*
-    operators reading the previous bar). Floor at 60 so a 1-rule RSI(14) tick
-    fetches ~60 candles, not 300."""
-    lengths = [s.length or 50 for s in specs]
-    return max(60, max(lengths, default=50) * 3)
-
-
-def _union_specs(specs_lists: list[list[IndicatorSpec]]) -> list[IndicatorSpec]:
-    """Deduplicate IndicatorSpec across rules (so we compute each indicator
-    once even if 5 rules want RSI(14))."""
-    seen: dict[tuple[str, int | None, str], IndicatorSpec] = {}
-    for specs in specs_lists:
-        for s in specs:
-            seen.setdefault((s.name, s.length, s.source), s)
-    return list(seen.values())
 
 
 def _is_within_cooldown(rule: dict[str, Any]) -> bool:
@@ -212,45 +196,80 @@ async def _evaluate_close(symbol: str, timeframe: str) -> None:
         if not compiled:
             return
 
-        union = _union_specs([s.indicators for _, s in compiled])
         until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
-        panel = await compute_panel(
+        panel = await compute_panel_for_specs(
             session,
-            exchange=EXCHANGE_NAME,
             symbol=symbol,
             timeframe=timeframe,
-            lookback=_max_lookback(union),
-            specs=union,
+            specs=[s for _, s in compiled],
             until=until,
         )
 
     if panel.height == 0:
         return
 
-    hits: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    # Split hits: scout-triggered → dispatch to agent (C.1); else → alert_event.
+    scout_hits: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    alert_hits: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for rule, spec in compiled:
         if not evaluate_rule(spec, panel):
             continue
         if _is_within_cooldown(rule):
             log.info("alerts.cooldown_blocked", rule_id=rule["id"])
             continue
-        hits.append((rule, build_snapshot(spec, panel)))
+        snapshot = build_snapshot(spec, panel)
+        if rule.get("is_scout_trigger"):
+            scout_hits.append((rule, snapshot))
+        else:
+            alert_hits.append((rule, snapshot))
 
-    if not hits:
-        return
+    # Regular alerts path — unchanged.
+    if alert_hits:
+        async with session_scope() as session:
+            recorded = await _record_hits_batch(session, hits=alert_hits)
+        for rule, payload in recorded:
+            await publish_json(alerts_channel(rule["user_id"]), payload)
+            log.info(
+                "alerts.fired",
+                rule_id=payload["rule_id"],
+                event_id=payload["event_id"],
+                symbol=symbol,
+                timeframe=timeframe,
+            )
 
-    async with session_scope() as session:
-        recorded = await _record_hits_batch(session, hits=hits)
+    # Scout path (C.1) — fire-and-forget dispatcher per match. Still bumps
+    # `last_fired_at` so the rule's own cooldown applies symmetrically.
+    if scout_hits:
+        # Lazy import to avoid the agent module being imported by the alerts
+        # runtime tests (and to keep the lifespan of the agent build out of
+        # the alert path when the scout feature isn't in use).
+        from app.setups.scout_dispatcher import dispatch_scout_match
 
-    for rule, payload in recorded:
-        await publish_json(alerts_channel(rule["user_id"]), payload)
-        log.info(
-            "alerts.fired",
-            rule_id=payload["rule_id"],
-            event_id=payload["event_id"],
-            symbol=symbol,
-            timeframe=timeframe,
-        )
+        async with session_scope() as session:
+            for rule, _ in scout_hits:
+                await session.execute(
+                    text(
+                        "UPDATE alert_rules SET last_fired_at = now(), "
+                        "updated_at = now() WHERE id = CAST(:rid AS uuid)"
+                    ),
+                    {"rid": rule["id"]},
+                )
+        now_utc = datetime.now(tz=UTC)
+        for rule, snapshot in scout_hits:
+            task = asyncio.create_task(
+                dispatch_scout_match(
+                    user_id=rule["user_id"],
+                    rule_id=rule["id"],
+                    rule_name=rule["name"],
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    snapshot=snapshot,
+                    fired_at=now_utc,
+                ),
+                name=f"scout:{rule['id']}",
+            )
+            _SCOUT_TASKS.add(task)
+            task.add_done_callback(_SCOUT_TASKS.discard)
 
 
 async def _market_loop(symbol: str, timeframe: str) -> None:

@@ -5,8 +5,8 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import type { RankedStrategy } from "@/lib/strategy-rank"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import type { RankedStrategy } from "@/lib/research/strategy-rank"
 
 interface BestStrategyHeroProps {
   strategy: RankedStrategy | null

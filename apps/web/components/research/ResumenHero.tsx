@@ -1,8 +1,8 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { OverviewKpi } from "@/lib/research-rollup"
-import { cn } from "@/lib/utils"
+import type { OverviewKpi } from "@/lib/research/rollup"
+import { cn } from "@/lib/core/utils"
 
 interface ResumenHeroProps {
   kpi: OverviewKpi

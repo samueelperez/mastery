@@ -12,8 +12,8 @@ import {
   type OiTrend,
   type OpenInterestDTO,
   type ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface OpenInterestSummaryCardProps {
   output: ToolResultEnvelope<OpenInterestDTO> | OpenInterestDTO

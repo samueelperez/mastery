@@ -6,7 +6,7 @@ import { notFound, useParams } from "next/navigation"
 
 import { BacktestDetail } from "@/components/research/BacktestDetail"
 import { Spinner } from "@/components/ui/spinner"
-import { fetchBacktest } from "@/lib/api"
+import { fetchBacktest } from "@/lib/core/api"
 
 export default function BacktestDetailPage() {
   const params = useParams<{ id: string }>()

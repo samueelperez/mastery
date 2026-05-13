@@ -4,7 +4,7 @@ import { AlertTriangleIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent } from "@/components/ui/card"
-import type { StrategyMetricsDTO } from "@/lib/api"
+import type { StrategyMetricsDTO } from "@/lib/core/api"
 
 interface RobustnessSectionProps {
   metrics: StrategyMetricsDTO

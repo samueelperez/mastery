@@ -3,8 +3,8 @@
 import { useMemo } from "react"
 
 import { SetupCard } from "@/components/journal/SetupCard"
-import type { SetupListRowDTO } from "@/lib/api"
-import { bucketByDay, type DayBuckets } from "@/lib/journal-rollup"
+import type { SetupListRowDTO } from "@/lib/core/api"
+import { bucketByDay, type DayBuckets } from "@/lib/journal/rollup"
 
 interface DiarioFeedProps {
   rows: SetupListRowDTO[]

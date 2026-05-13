@@ -1,7 +1,7 @@
 "use client"
 
 import { BrandMark } from "@/components/nav/BrandMark"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 import { LivePulse } from "./LivePulse"
 

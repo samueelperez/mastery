@@ -3,7 +3,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
-import type { Timeframe } from "@/lib/chat-types"
+import type { Timeframe } from "@/lib/chat/types"
 
 /** Indicadores activos (derivados de get_indicators / get_multi_tf_confluence).
  *  Los VALORES no se guardan — el frontend los recomputa desde los candles

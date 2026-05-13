@@ -1,8 +1,8 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import type { KeyLevel } from "@/lib/chat-types"
-import { cn } from "@/lib/utils"
+import type { KeyLevel } from "@/lib/chat/types"
+import { cn } from "@/lib/core/utils"
 
 interface KeyLevelsStripProps {
   levels: KeyLevel[]

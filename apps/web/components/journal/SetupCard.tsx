@@ -4,9 +4,19 @@ import { ArrowDownIcon, ArrowUpIcon, CheckIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import type { SetupListRowDTO, SetupStatus } from "@/lib/api"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import { cn } from "@/lib/utils"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import type { SetupListRowDTO, SetupStatus } from "@/lib/core/api"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import { cn } from "@/lib/core/utils"
 
 interface SetupCardProps {
   setup: SetupListRowDTO
@@ -30,6 +40,78 @@ const STATUS_CLS: Record<SetupStatus, string> = {
   active: "border-[var(--long)]/40 text-[var(--long)]",
   closed: "border-border text-muted-foreground",
   cancelled: "border-border text-muted-foreground/70",
+}
+
+interface StatusReadout {
+  label: string
+  cls: string
+  tooltip: string
+}
+
+/** Deriva la causa terminal del setup directamente desde los campos del
+ *  `SetupListRowDTO` (sin necesidad de cargar events). Diferencia las
+ *  cuatro causas reales de "cancelled" (auto-invalidated / expired /
+ *  manual cancel) y las tres de "closed" (TP / SL / breakeven o cierre
+ *  manual). Cada causa lleva su propio tooltip para que el usuario
+ *  entienda el "por qué" sin abrir el panel. */
+function deriveStatusReadout(setup: SetupListRowDTO): StatusReadout {
+  const base = STATUS_LABEL[setup.status]
+  const baseCls = STATUS_CLS[setup.status]
+  if (setup.status === "cancelled") {
+    if (setup.invalidated_at) {
+      return {
+        label: "invalidado",
+        cls: "border-[var(--short)]/35 text-[var(--short)]/85",
+        tooltip:
+          "Auto-invalidado por una invalidation_condition antes de entrar — el setup pre-entry violó su tesis. Abre el detalle para ver qué condición disparó.",
+      }
+    }
+    if (setup.expires_at && new Date(setup.expires_at).getTime() <= Date.now()) {
+      return {
+        label: "expirado",
+        cls: "border-[var(--amber)]/45 text-[var(--amber)]/90",
+        tooltip:
+          "Wall-clock expires_at venció antes de entry hit. El setup era time-sensitive y la ventana cerró.",
+      }
+    }
+    return {
+      label: base,
+      cls: baseCls,
+      tooltip:
+        "Cancelado manualmente por el usuario. Sin discriminador automático.",
+    }
+  }
+  if (setup.status === "closed") {
+    const r = setup.r_multiple
+    if (r !== null && r > 0.2) {
+      return {
+        label: "TP hit",
+        cls: "border-[var(--long)]/40 text-[var(--long)]",
+        tooltip: `Cerrado en TP con R-multiple ${r >= 0 ? "+" : ""}${r.toFixed(2)}.`,
+      }
+    }
+    if (r !== null && r < 0) {
+      return {
+        label: "SL hit",
+        cls: "border-[var(--short)]/40 text-[var(--short)]",
+        tooltip: `Cerrado en SL con R-multiple ${r.toFixed(2)}.`,
+      }
+    }
+    return {
+      label: base,
+      cls: baseCls,
+      tooltip:
+        "Cerrado en breakeven o por cierre manual / time stop. Abre el detalle para ver el motivo.",
+    }
+  }
+  return {
+    label: base,
+    cls: baseCls,
+    tooltip:
+      setup.status === "pending"
+        ? "Esperando entry hit. Las invalidation_conditions se evalúan en cada candle close."
+        : "Setup activo — entry tocado, watching SL/TPs.",
+  }
 }
 
 const SIDE_TINT: Record<SetupListRowDTO["side"], string> = {
@@ -73,6 +155,7 @@ export function SetupCard({
   const targetsTotal = setup.targets.length
   const proposedRel = formatRelativeTime(setup.proposed_at)
   const r = setup.r_multiple
+  const statusReadout = deriveStatusReadout(setup)
 
   return (
     <Card
@@ -102,15 +185,23 @@ export function SetupCard({
               · {setup.timeframe} · {sideLabel}
             </span>
           </div>
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono text-[10px] uppercase tracking-[0.12em]",
-              STATUS_CLS[setup.status],
-            )}
-          >
-            {STATUS_LABEL[setup.status]}
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "cursor-help font-mono text-[10px] uppercase tracking-[0.12em]",
+                  statusReadout.cls,
+                )}
+              >
+                {statusReadout.label}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <span className="text-[11px]">{statusReadout.tooltip}</span>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center justify-between gap-2 font-mono text-[10px] tabular-nums text-muted-foreground">
           <span>{formatSetupTag(setup.setup_tag)}</span>
@@ -125,11 +216,11 @@ export function SetupCard({
               {formatPrice(setup.entry_px)}
             </span>
           </li>
-          {setup.invalidation_px !== null && (
+          {setup.stop_loss_px !== null && (
             <li className="flex items-center justify-between">
               <span className="text-[var(--fg-3)]">SL</span>
               <span className="text-[var(--short)]">
-                {formatPrice(setup.invalidation_px)}
+                {formatPrice(setup.stop_loss_px)}
               </span>
             </li>
           )}
@@ -169,9 +260,32 @@ export function SetupCard({
           </div>
         )}
         {showMistakesPreview && setup.mistakes && (
-          <p className="mt-2 line-clamp-2 text-[11px] leading-snug text-[var(--fg-3)]">
-            {setup.mistakes}
-          </p>
+          /* Hover muestra la lección completa sin truncar — las lessons son
+           *  el output más valioso del post-mortem y no deberían estar
+           *  cortadas por line-clamp. Card sigue compacta (1 línea preview)
+           *  pero el detalle es 1 click away. */
+          <HoverCard openDelay={120} closeDelay={80}>
+            <HoverCardTrigger asChild>
+              <p
+                onClick={(e) => e.stopPropagation()}
+                className="mt-2 cursor-help truncate text-[11px] leading-snug text-[var(--fg-3)] hover:text-[var(--fg-2)]"
+                title="hover para ver la lección completa"
+              >
+                {setup.mistakes}
+              </p>
+            </HoverCardTrigger>
+            <HoverCardContent
+              className="w-80 p-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
+                lección del post-mortem
+              </p>
+              <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-foreground/85">
+                {setup.mistakes}
+              </p>
+            </HoverCardContent>
+          </HoverCard>
         )}
       </CardContent>
     </Card>

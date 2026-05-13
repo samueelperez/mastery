@@ -14,7 +14,7 @@ import {
 } from "recharts"
 
 import { Card, CardContent } from "@/components/ui/card"
-import type { TradeDTO } from "@/lib/api"
+import type { TradeDTO } from "@/lib/core/api"
 
 interface TradeDistributionProps {
   trades: TradeDTO[]

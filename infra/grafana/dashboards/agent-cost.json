@@ -1,0 +1,168 @@
+{
+  "uid": "agent-cost",
+  "title": "Agent cost (LLM spend)",
+  "tags": ["trading-copilot", "agent", "cost", "ops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "pg",
+        "type": "datasource",
+        "query": "postgres",
+        "current": {
+          "selected": false,
+          "text": "Postgres",
+          "value": "Postgres"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cost USD per day (reviewer)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 0,
+            "fillOpacity": 80
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, model_id AS metric, SUM(COALESCE(cost_usd, 0)) AS value FROM setup_reviews WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "description": "Reviewer agent daily spend by model_id. cost_usd is computed at dispatch from review_price_input/output/cache_read settings × usage_tokens."
+    },
+    {
+      "id": 2,
+      "title": "Cost USD per day (post-mortem)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 0,
+            "fillOpacity": 80
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, model_id AS metric, SUM(COALESCE(cost_usd, 0)) AS value FROM setup_post_mortems WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY 1, 2 ORDER BY 1"
+        }
+      ],
+      "description": "Post-mortem agent daily spend by model_id. Triggered when a setup closes (one run per trade close at most)."
+    },
+    {
+      "id": 3,
+      "title": "Tokens per turn (p50/p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "WITH t AS (SELECT date_trunc('hour', created_at) AS bucket, ((usage_tokens->>'input_tokens')::int + (usage_tokens->>'output_tokens')::int) AS total_tokens FROM setup_reviews WHERE created_at >= NOW() - INTERVAL '7 days' AND usage_tokens IS NOT NULL) SELECT bucket AS time, 'reviewer p50' AS metric, percentile_cont(0.5) WITHIN GROUP (ORDER BY total_tokens) AS value FROM t GROUP BY bucket UNION ALL SELECT bucket AS time, 'reviewer p95' AS metric, percentile_cont(0.95) WITHIN GROUP (ORDER BY total_tokens) AS value FROM t GROUP BY bucket ORDER BY 1"
+        }
+      ],
+      "description": "Tokens per agent run (input+output, no cache breakdown). High p95 vs p50 suggests blow-out queries dominated by long retrieved-context tools (journal_query, similar_setups)."
+    },
+    {
+      "id": 4,
+      "title": "Aggregate cost (7d) by source",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          }
+        }
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "reduceOptions": {"calcs": ["sum"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT NOW() AS time, 'reviewer' AS metric, SUM(COALESCE(cost_usd,0)) AS value FROM setup_reviews WHERE created_at >= NOW() - INTERVAL '7 days' UNION ALL SELECT NOW() AS time, 'post_mortem' AS metric, SUM(COALESCE(cost_usd,0)) AS value FROM setup_post_mortems WHERE created_at >= NOW() - INTERVAL '7 days'"
+        }
+      ],
+      "description": "7-day spend by agent source. The main chat agent's cost is added once PR-11 lands llm_usage_log; until then this panel covers reviewer + post_mortem only."
+    },
+    {
+      "id": 5,
+      "title": "Avg cost per setup (closed setups)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        }
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "WITH per_setup AS (SELECT trade_id, SUM(cost_usd) AS total FROM (SELECT trade_id, cost_usd FROM setup_reviews UNION ALL SELECT trade_id, cost_usd FROM setup_post_mortems) u WHERE cost_usd IS NOT NULL GROUP BY trade_id) SELECT NOW() AS time, AVG(total) AS value FROM per_setup"
+        }
+      ],
+      "description": "Average accumulated cost across all review + post-mortem runs per closed setup. Target stays under ~$0.05 with the F4 review tuning."
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

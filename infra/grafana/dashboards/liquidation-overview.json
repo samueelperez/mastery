@@ -1,0 +1,154 @@
+{
+  "uid": "liquidation-overview",
+  "title": "Liquidation Heatmap Engine (Cerebro 1)",
+  "tags": ["trading-copilot", "liquidation", "cerebro-1"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Snapshots per hour by provider",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "stacking": {"mode": "none"},
+            "fillOpacity": 10
+          }
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (symbol, timeframe) (rate(mt_liq_snapshots_total[5m])) * 3600",
+          "legendFormat": "{{symbol}} · {{timeframe}}"
+        }
+      ],
+      "description": "Successful HeatmapService.get_snapshot returns. Outcomes ok+degraded; excludes empty."
+    },
+    {
+      "id": 2,
+      "title": "Provider latency p95 (seconds)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1.0},
+              {"color": "red", "value": 2.5}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(mt_liq_snapshot_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95 · {{provider}}"
+        }
+      ],
+      "description": "Per-call latency for each provider's get_heatmap. Provider timeout is 3s; bucket boundaries inside _call_providers."
+    },
+    {
+      "id": 3,
+      "title": "Hyperliquid active addresses",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 100},
+              {"color": "green", "value": 500}
+            ]
+          }
+        }
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "mt_liq_active_addresses",
+          "legendFormat": "Addresses"
+        }
+      ],
+      "description": "Total rows in hyperliquid_known_addresses. Drives Provider B coverage. <100 → degraded coverage, 100-500 → ramping, ≥500 → healthy steady state."
+    },
+    {
+      "id": 4,
+      "title": "Provider error rate (per minute)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cpm",
+          "custom": {
+            "drawStyle": "line",
+            "stacking": {"mode": "normal"},
+            "fillOpacity": 40
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (provider, kind) (rate(mt_liq_provider_errors_total[5m])) * 60",
+          "legendFormat": "{{provider}} · {{kind}}"
+        }
+      ],
+      "description": "Per-provider failures by kind (timeout/exception/stale). Steady-state should be ~0 ops/min; spikes flag upstream issues."
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

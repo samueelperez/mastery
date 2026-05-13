@@ -2,12 +2,12 @@
 
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
-import type { CandleDTO } from "@/lib/api"
+import type { CandleDTO } from "@/lib/core/api"
 import type {
   OverlayBundle,
   TradeIdeaOverlay,
 } from "@/lib/store/chart-overlays"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/core/utils"
 
 import {
   computeEma,

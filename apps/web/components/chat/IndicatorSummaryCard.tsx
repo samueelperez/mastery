@@ -15,8 +15,8 @@ import {
 import type {
   IndicatorPanelDTO,
   ToolResultEnvelope,
-} from "@/lib/agent-outputs"
-import { cn } from "@/lib/utils"
+} from "@/lib/agent/outputs"
+import { cn } from "@/lib/core/utils"
 
 interface IndicatorSummaryCardProps {
   output: ToolResultEnvelope<IndicatorPanelDTO> | IndicatorPanelDTO

@@ -7,19 +7,21 @@ import {
 } from "@/components/ai-elements/conversation"
 import { Message, MessageContent } from "@/components/ai-elements/message"
 import { Card } from "@/components/ui/card"
-import { BEARER_TOKEN_KEY } from "@/lib/auth/auth-client"
-import { env } from "@/lib/env"
-import { isBriefAnalysis, isTradeIdea } from "@/lib/chat-types"
+import { BEARER_TOKEN_KEY } from "@/lib/core/auth/auth-client"
+import { env } from "@/lib/core/env"
+import { isBriefAnalysis, isTradeIdea } from "@/lib/chat/types"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type DynamicToolUIPart, type ToolUIPart } from "ai"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+
+import { readChatSeedReview } from "@/lib/chat/seed-review"
 
 import { ChatComposer } from "./ChatComposer"
 import { ChatEmptyState } from "./ChatEmptyState"
 
 import { BrandMark } from "@/components/nav/BrandMark"
 import { useActiveSymbol } from "@/lib/store/active-symbol"
-import { toolLabel } from "@/lib/tool-labels"
+import { toolLabel } from "@/lib/chat/tool-labels"
 
 import { AlertCreatedCard, type AlertCreatedToolOutput } from "./AlertCreatedCard"
 import { BacktestResultCard, type BacktestToolOutput } from "./BacktestResultCard"
@@ -60,8 +62,40 @@ import {
 } from "./StructureSummaryCard"
 import { BriefAnalysisCard } from "./BriefAnalysisCard"
 import { ChatExportButton } from "./ChatExportButton"
+import { PostMortemCard } from "./PostMortemCard"
 import { TradeIdeaCard } from "./TradeIdeaCard"
+import { TradeReviewCard } from "./TradeReviewCard"
 import { useSymbolBridge } from "./useSymbolBridge"
+import { useTradeReviewsStream } from "@/hooks/useTradeReviewsStream"
+import { readChatSeedPostMortem } from "@/lib/chat/seed-post-mortem"
+import type { PostMortemPayload, TradeReviewPayload } from "@/lib/core/ws"
+
+function isTradeReviewPayload(value: unknown): value is TradeReviewPayload {
+  if (!value || typeof value !== "object") return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.review_id === "string" &&
+    typeof v.setup_id === "string" &&
+    typeof v.summary === "string" &&
+    typeof v.rationale === "string" &&
+    typeof v.current_state === "string" &&
+    typeof v.recommendation === "string"
+  )
+}
+
+function isPostMortemPayload(value: unknown): value is PostMortemPayload {
+  if (!value || typeof value !== "object") return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.post_mortem_id === "string" &&
+    typeof v.trade_id === "string" &&
+    typeof v.verdict === "string" &&
+    typeof v.outcome === "string" &&
+    typeof v.lesson_es === "string" &&
+    Array.isArray(v.failure_factors) &&
+    Array.isArray(v.success_factors)
+  )
+}
 
 function isBacktestOutput(value: unknown): value is BacktestToolOutput {
   if (!value || typeof value !== "object") return false
@@ -118,6 +152,99 @@ export function CopilotChat({ className }: CopilotChatProps) {
     }),
   })
   const { warning: bridgeWarning, dismissWarning } = useSymbolBridge(messages)
+
+  // Inyecta TradeReview / PostMortem pushed por backend como mensajes del
+  // assistant. Reutilizamos el mismo synthetic-tool pattern (`tool-*`) para
+  // que el switch existente los renderice — sin contaminar el flujo de
+  // `useChat` con un type aparte.
+  useTradeReviewsStream(
+    (review) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `review-${review.review_id}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-trade_review",
+              state: "output-available",
+              toolCallId: `review-${review.review_id}`,
+              input: {},
+              output: review,
+            } as unknown as ToolUIPart,
+          ],
+        },
+      ])
+    },
+    (postMortem) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `pm-${postMortem.post_mortem_id}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-post_mortem",
+              state: "output-available",
+              toolCallId: `pm-${postMortem.post_mortem_id}`,
+              input: {},
+              output: postMortem,
+            } as unknown as ToolUIPart,
+          ],
+        },
+      ])
+    },
+  )
+
+  // Seed desde el diario: si el usuario hizo click en "Revisión IA" en un
+  // setup, le inyectamos la TradeReviewCard al inicio del chat y pre-llenamos
+  // el composer con un mensaje sugerido. Una sola vez al mount — la key se
+  // limpia al leerla (readChatSeedReview consume).
+  useEffect(() => {
+    // F5.5: leer AMBAS seed keys al mount. Post-mortem va primero (evento
+    // terminal — el trade ya cerró y la review estaría stale).
+    const pmSeed = readChatSeedPostMortem()
+    const reviewSeed = readChatSeedReview()
+    if (!pmSeed && !reviewSeed) return
+    setMessages((prev) => {
+      const next = [...prev]
+      if (pmSeed) {
+        next.unshift({
+          id: `seed-pm-${pmSeed.postMortem.post_mortem_id}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-post_mortem",
+              state: "output-available",
+              toolCallId: `seed-pm-${pmSeed.postMortem.post_mortem_id}`,
+              input: {},
+              output: pmSeed.postMortem,
+            } as unknown as ToolUIPart,
+          ],
+        })
+      }
+      if (reviewSeed) {
+        next.unshift({
+          id: `seed-review-${reviewSeed.review.review_id}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-trade_review",
+              state: "output-available",
+              toolCallId: `seed-review-${reviewSeed.review.review_id}`,
+              input: {},
+              output: reviewSeed.review,
+            } as unknown as ToolUIPart,
+          ],
+        })
+      }
+      return next
+    })
+    // Pre-fill composer: post-mortem suggested_message tiene preferencia si
+    // existe (es el evento más reciente).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setText(pmSeed?.suggested_message ?? reviewSeed?.suggested_message ?? "")
+  }, [setMessages])
 
   const submitting = status === "submitted" || status === "streaming"
 
@@ -345,6 +472,39 @@ export function CopilotChat({ className }: CopilotChatProps) {
                           "main",
                         )
                       }
+                    } else if (
+                      toolName === "trade_review" &&
+                      toolPart.state === "output-available" &&
+                      isTradeReviewPayload(toolPart.output)
+                    ) {
+                      // Mensaje synthetic empujado por /ws/reviews. Lo
+                      // renderizamos como card en main siempre (es la
+                      // respuesta principal del push, no auxiliar).
+                      pushNode(
+                        <TradeReviewCard key={key} review={toolPart.output} />,
+                        "main",
+                      )
+                      sources.push({
+                        id: `tool-${toolPart.toolCallId ?? idx}`,
+                        title: "revisión de trade",
+                      })
+                    } else if (
+                      toolName === "post_mortem" &&
+                      toolPart.state === "output-available" &&
+                      isPostMortemPayload(toolPart.output)
+                    ) {
+                      // F5.5 — synthetic post-mortem card push por /ws/reviews.
+                      pushNode(
+                        <PostMortemCard
+                          key={key}
+                          postMortem={toolPart.output}
+                        />,
+                        "main",
+                      )
+                      sources.push({
+                        id: `tool-${toolPart.toolCallId ?? idx}`,
+                        title: "análisis post-mortem",
+                      })
                     } else if (
                       toolName === "run_backtest" &&
                       toolPart.state === "output-available" &&

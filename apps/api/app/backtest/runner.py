@@ -29,7 +29,7 @@ from app.backtest.metrics import (
     compute_metrics,
 )
 from app.backtest.strategies import SignalFrame, get_strategy
-from app.storage.ohlcv_repo import fetch_range
+from app.market.ohlcv.repo import fetch_range
 
 log = structlog.get_logger(__name__)
 

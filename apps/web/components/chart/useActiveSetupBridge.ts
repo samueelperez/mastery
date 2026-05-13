@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { useEffect } from "react"
 
-import { fetchSetups, type SetupListRowDTO } from "@/lib/api"
-import type { Timeframe } from "@/lib/chat-types"
+import { fetchSetups, type SetupListRowDTO } from "@/lib/core/api"
+import type { Timeframe } from "@/lib/chat/types"
 import { isWatchSymbol } from "@/lib/store/active-symbol"
 import {
   useChartOverlays,
@@ -42,10 +42,12 @@ export function useActiveSetupBridge(symbol: string): void {
     queryFn: ({ signal }) =>
       fetchSetups({ symbol, source: "agent_proposal", signal }),
     enabled,
-    staleTime: 30_000,
-    // Cada 30s rechequea — si el watcher cierra un setup, queremos que el
-    // chart deje de pintarlo cuando vuelva a cargar.
-    refetchInterval: 30_000,
+    staleTime: 10_000,
+    // Cada 10s rechequea — si el scout propone un setup nuevo o el watcher
+    // cierra uno, el chart pinta/despinta zonas con feedback loop tight
+    // (A.8: bajado de 30s a 10s para acomodar mayor cadencia esperada con
+    // scout autónomo en Fase C).
+    refetchInterval: 10_000,
   })
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export function useActiveSetupBridge(symbol: string): void {
 
 /** Mapea los setups pending/active del símbolo a `TradeIdeaOverlay[]`.
  *  Filtros: status ∈ {pending, active}, mismo símbolo, timeframe válido,
- *  invalidation_px no nulo. Se ordena por `proposed_at` desc para que el
+ *  stop_loss_px no nulo. Se ordena por `proposed_at` desc para que el
  *  switcher arranque mostrando el más reciente. */
 function mapOpenSetupsToOverlays(
   rows: SetupListRowDTO[],
@@ -68,7 +70,7 @@ function mapOpenSetupsToOverlays(
   const open = rows
     .filter((r) => r.status === "pending" || r.status === "active")
     .filter((r) => r.symbol === upper)
-    .filter((r) => r.invalidation_px !== null)
+    .filter((r) => r.stop_loss_px !== null)
     .sort((a, b) => {
       const at = a.proposed_at ? new Date(a.proposed_at).getTime() : 0
       const bt = b.proposed_at ? new Date(b.proposed_at).getTime() : 0
@@ -86,7 +88,7 @@ function mapOpenSetupsToOverlays(
       id: row.id,
       direction: row.side,
       entry: row.entry_px,
-      stopLoss: row.invalidation_px!,
+      stopLoss: row.stop_loss_px!,
       targets: row.targets.map((t) => ({ label: t.label, price: t.price })),
       tf,
       proposedAtSec,

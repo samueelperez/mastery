@@ -4,8 +4,8 @@ import { useState } from "react"
 
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { cn } from "@/lib/utils"
-import type { JournalTradeListRowDTO } from "@/lib/api"
+import { cn } from "@/lib/core/utils"
+import type { JournalTradeListRowDTO } from "@/lib/core/api"
 
 import { JournalEntryCard } from "./JournalEntryCard"
 

@@ -18,7 +18,7 @@ import {
 } from "lightweight-charts"
 import { useEffect, useRef } from "react"
 
-import type { CandleDTO } from "@/lib/api"
+import type { CandleDTO } from "@/lib/core/api"
 import type {
   OverlayBundle,
   TradeIdeaOverlay,

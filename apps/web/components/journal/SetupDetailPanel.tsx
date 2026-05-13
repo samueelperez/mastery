@@ -10,6 +10,7 @@ import {
   MinusIcon,
   XIcon,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { useMemo } from "react"
 
 import {
@@ -24,14 +25,20 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  approveSetupRequest,
   cancelSetupRequest,
   fetchSetup,
+  rejectSetupRequest,
   type SetupDetailDTO,
   type SetupEventDTO,
   type SetupTargetDTO,
-} from "@/lib/api"
-import { formatSetupTag } from "@/lib/format-setup-tag"
-import { cn } from "@/lib/utils"
+} from "@/lib/core/api"
+import {
+  CHAT_SEED_REVIEW_KEY,
+  type ChatSeedReview,
+} from "@/lib/chat/seed-review"
+import { formatSetupTag } from "@/lib/journal/format-setup-tag"
+import { cn } from "@/lib/core/utils"
 
 interface SetupDetailPanelProps {
   setupId: string | null
@@ -46,6 +53,13 @@ const EVENT_LABEL: Record<SetupEventDTO["event"], string> = {
   expired: "expirado",
   manual_close: "cierre manual",
   cancelled: "cancelado",
+  invalidated: "auto-invalidado",
+  review_generated: "revisión IA",
+  be_moved: "SL a breakeven",
+  trailing_updated: "trailing actualizado",
+  time_stopped: "time stop",
+  approved: "aprobado",
+  rejected_by_user: "rechazado",
 }
 
 const EVENT_TONE: Record<SetupEventDTO["event"], string> = {
@@ -56,6 +70,13 @@ const EVENT_TONE: Record<SetupEventDTO["event"], string> = {
   expired: "var(--fg-3)",
   manual_close: "var(--fg-3)",
   cancelled: "var(--fg-3)",
+  invalidated: "var(--amber)",
+  review_generated: "var(--violet)",
+  be_moved: "var(--long)",
+  trailing_updated: "var(--long)",
+  time_stopped: "var(--amber)",
+  approved: "var(--long)",
+  rejected_by_user: "var(--short)",
 }
 
 const STATUS_LABEL: Record<SetupDetailDTO["status"], string> = {
@@ -102,6 +123,27 @@ export function SetupDetailPanel({
     mutationFn: (id: string) => cancelSetupRequest(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["setup-list"] })
+      queryClient.invalidateQueries({ queryKey: ["setup-detail", setupId] })
+    },
+  })
+
+  // C.3 — scout proposals require explicit approval before SetupRuntime
+  // activates them on entry hit. These mutations are no-op (rejected by
+  // backend with 4xx) on agent_proposal setups, but the UI hides them in
+  // that case so the user only sees Approve/Reject when relevant.
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => approveSetupRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["setup-list"] })
+      queryClient.invalidateQueries({ queryKey: ["diario-setups"] })
+      queryClient.invalidateQueries({ queryKey: ["setup-detail", setupId] })
+    },
+  })
+  const rejectMutation = useMutation({
+    mutationFn: (id: string) => rejectSetupRequest(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["setup-list"] })
+      queryClient.invalidateQueries({ queryKey: ["diario-setups"] })
       queryClient.invalidateQueries({ queryKey: ["setup-detail", setupId] })
     },
   })
@@ -158,7 +200,7 @@ export function SetupDetailPanel({
               borderColor: `color-mix(in oklch, ${statusTone.color} 30%, transparent)`,
             }}
           >
-            {STATUS_LABEL[data.status]}
+            {cancelledFlavorLabel(data) ?? STATUS_LABEL[data.status]}
           </Badge>
         </div>
         {onClose && (
@@ -221,8 +263,8 @@ export function SetupDetailPanel({
               resumen del setup
             </AccordionTrigger>
             <AccordionContent>
-              <p className="text-[13px] leading-relaxed text-[var(--fg-2)]">
-                {data.summary_text}
+              <p className="whitespace-pre-line text-[13px] leading-relaxed text-[var(--fg-2)]">
+                {data.summary_es_full ?? data.summary_text}
               </p>
             </AccordionContent>
           </AccordionItem>
@@ -242,7 +284,7 @@ export function SetupDetailPanel({
             </AccordionTrigger>
             <AccordionContent>
               {hasEvents ? (
-                <Timeline events={data.events} />
+                <Timeline data={data} />
               ) : (
                 <p className="text-[11px] text-[var(--fg-3)]">
                   sin eventos registrados.
@@ -255,15 +297,46 @@ export function SetupDetailPanel({
 
       {data.status === "pending" && (
         <footer className="border-t border-border px-3 py-2.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full font-mono text-[11px] uppercase tracking-[0.14em]"
-            disabled={cancelMutation.isPending}
-            onClick={() => cancelMutation.mutate(data.id)}
-          >
-            {cancelMutation.isPending ? "cancelando…" : "cancelar setup"}
-          </Button>
+          {data.source === "scout_proposal" &&
+          !hasApprovalEvent(data.events) ? (
+            // Scout autónomo sin aprobar — el SetupRuntime NO transitará a
+            // active sin un evento `approved`. Aprobar = autorizar; rechazar
+            // cancela. La opción "cancelar" plana queda escondida porque el
+            // contexto natural aquí es decidir sobre la propuesta del scout.
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1 font-mono text-[11px] uppercase tracking-[0.14em]"
+                disabled={
+                  approveMutation.isPending || rejectMutation.isPending
+                }
+                onClick={() => approveMutation.mutate(data.id)}
+              >
+                {approveMutation.isPending ? "aprobando…" : "aprobar"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 font-mono text-[11px] uppercase tracking-[0.14em]"
+                disabled={
+                  approveMutation.isPending || rejectMutation.isPending
+                }
+                onClick={() => rejectMutation.mutate(data.id)}
+              >
+                {rejectMutation.isPending ? "rechazando…" : "rechazar"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full font-mono text-[11px] uppercase tracking-[0.14em]"
+              disabled={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate(data.id)}
+            >
+              {cancelMutation.isPending ? "cancelando…" : "cancelar setup"}
+            </Button>
+          )}
         </footer>
       )}
     </aside>
@@ -282,11 +355,11 @@ function PnlHero({ data }: { data: SetupDetailDTO }) {
     () =>
       targetRMultiples(
         data.entry_px,
-        data.invalidation_px,
+        data.stop_loss_px,
         data.side as "long" | "short",
         targets,
       ),
-    [data.entry_px, data.invalidation_px, data.side, targets],
+    [data.entry_px, data.stop_loss_px, data.side, targets],
   )
 
   if (data.status === "closed" && r !== null) {
@@ -530,18 +603,18 @@ function LevelsLadder({ data }: { data: SetupDetailDTO }) {
       price: data.entry_px,
       hit: Boolean(data.entry_hit_at),
     })
-    if (data.invalidation_px !== null) {
+    if (data.stop_loss_px !== null) {
       out.push({
         key: "sl",
         kind: "sl",
         label: "SL",
-        price: data.invalidation_px,
-        // Para closed: si exit_px tocó SL (cerca de invalidation), marcamos hit.
+        price: data.stop_loss_px,
+        // Para closed: si exit_px tocó SL (cerca de stop_loss), marcamos hit.
         hit:
           data.status === "closed" &&
           data.exit_px !== null &&
-          Math.abs(data.exit_px - data.invalidation_px) /
-            Math.max(Math.abs(data.invalidation_px), 1e-9) <
+          Math.abs(data.exit_px - data.stop_loss_px) /
+            Math.max(Math.abs(data.stop_loss_px), 1e-9) <
             0.005,
       })
     }
@@ -677,14 +750,22 @@ function LevelRow({
 }
 
 // -----------------------------------------------------------------------------
-// StrategyMeta — setup_tag + regime + confidence como chips compactos.
+// StrategyMeta — setup_tag header + régimen / confianza / fuente apilados.
+// Mismo patrón que apps/web/components/journal/JournalEntryCard.tsx (label
+// mono 11px arriba, valor abajo) para coherencia con la página de estrategias.
 // -----------------------------------------------------------------------------
 
 function StrategyMeta({ data }: { data: SetupDetailDTO }) {
+  const confidenceTone =
+    data.confidence === "high"
+      ? "var(--long)"
+      : data.confidence === "medium"
+        ? "var(--amber)"
+        : "var(--fg-3)"
   return (
     <section className="px-3 py-3">
       <p className="eyebrow mb-2">estrategia</p>
-      <div className="mb-2 flex flex-col gap-0.5">
+      <div className="mb-3 flex flex-col gap-0.5">
         <p className="text-[14px] font-medium text-foreground">
           {formatSetupTag(data.setup_tag)}
         </p>
@@ -692,28 +773,22 @@ function StrategyMeta({ data }: { data: SetupDetailDTO }) {
           {data.setup_tag}
         </p>
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        <MetaChip label="régimen" value={data.regime} />
+      <div className="grid grid-cols-3 gap-3">
+        <StrategyField label="régimen" value={data.regime} />
         {data.confidence && (
-          <MetaChip
+          <StrategyField
             label="confianza"
             value={data.confidence}
-            tone={
-              data.confidence === "high"
-                ? "var(--long)"
-                : data.confidence === "medium"
-                  ? "var(--amber)"
-                  : "var(--fg-3)"
-            }
+            tone={confidenceTone}
           />
         )}
-        <MetaChip label="fuente" value={data.source} />
+        <StrategyField label="fuente" value={data.source} />
       </div>
     </section>
   )
 }
 
-function MetaChip({
+function StrategyField({
   label,
   value,
   tone,
@@ -723,17 +798,17 @@ function MetaChip({
   tone?: string
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-[var(--bg-2)] px-1.5 py-0.5 font-mono text-[10px] tabular"
-      style={tone ? { borderColor: `color-mix(in oklch, ${tone} 30%, transparent)` } : undefined}
-    >
-      <span className="uppercase tracking-[0.14em] text-[var(--fg-3)]">
+    <div>
+      <p className="mb-1.5 font-mono text-[11px] uppercase tracking-widest text-[var(--fg-3)]">
         {label}
-      </span>
-      <span className="text-foreground" style={{ color: tone }}>
+      </p>
+      <p
+        className="font-mono text-xs text-foreground"
+        style={tone ? { color: tone } : undefined}
+      >
         {value}
-      </span>
-    </span>
+      </p>
+    </div>
   )
 }
 
@@ -741,48 +816,248 @@ function MetaChip({
 // Timeline — visual list con conector vertical.
 // -----------------------------------------------------------------------------
 
-function Timeline({ events }: { events: SetupEventDTO[] }) {
+/** Resuelve label y tono para un event kind. Si backend introduce un kind
+ *  nuevo y este file no se actualiza, mostramos el nombre raw + tono neutro
+ *  en lugar de crashear con undefined (CSS color invalid → render glitch). */
+function eventVisuals(event: SetupEventDTO["event"]): {
+  label: string
+  tone: string
+} {
+  return {
+    label: EVENT_LABEL[event] ?? event,
+    tone: EVENT_TONE[event] ?? "var(--fg-3)",
+  }
+}
+
+function Timeline({ data }: { data: SetupDetailDTO }) {
+  const router = useRouter()
+  const events = data.events
+
+  const openReviewInChat = (e: SetupEventDTO) => {
+    const review = buildTradeReviewFromEvent(data, e)
+    if (!review) return
+    const setupLabel = formatSetupTag(data.setup_tag)
+    const seed: ChatSeedReview = {
+      review,
+      suggested_message: `Cuéntame más sobre esta revisión de ${data.symbol} ${data.timeframe} (${setupLabel}). ¿Qué señales conviene vigilar ahora?`,
+    }
+    try {
+      window.sessionStorage.setItem(
+        CHAT_SEED_REVIEW_KEY,
+        JSON.stringify(seed),
+      )
+    } catch {
+      // sessionStorage puede no estar disponible (modo incógnito estricto);
+      // navegamos igual — la tarjeta no se inyectará pero el chat abre limpio.
+    }
+    router.push("/")
+  }
+
   return (
     <ol className="flex flex-col">
-      {events.map((e, i) => (
-        <li key={e.id} className="relative grid grid-cols-[16px_1fr] gap-2 pb-3 last:pb-0">
-          <div className="flex flex-col items-center">
-            <span
-              aria-hidden
-              className="mt-1 size-2 rounded-full"
-              style={{ backgroundColor: EVENT_TONE[e.event] }}
-            />
-            {i < events.length - 1 && (
+      {events.map((e, i) => {
+        const isReview = e.event === "review_generated"
+        const { label: eventLabel, tone: eventTone } = eventVisuals(e.event)
+        const headerLabel = (
+          <span
+            className={cn(
+              "font-mono text-[11px]",
+              isReview && "transition-colors hover:underline focus-visible:underline focus-visible:outline-none",
+            )}
+            style={{ color: eventTone }}
+          >
+            {eventLabel}
+            {isReview && (
               <span
                 aria-hidden
-                className="mt-0.5 w-px flex-1"
-                style={{
-                  backgroundColor: `color-mix(in oklch, ${EVENT_TONE[e.event]} 25%, transparent)`,
-                }}
-              />
-            )}
-          </div>
-          <div className="flex flex-col gap-0.5 pb-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <span
-                className="font-mono text-[11px]"
-                style={{ color: EVENT_TONE[e.event] }}
+                className="ml-1 text-[10px] opacity-60"
               >
-                {EVENT_LABEL[e.event]}
+                ↗
               </span>
-              <span className="font-mono text-[10px] tabular-nums text-[var(--fg-3)]">
-                {formatDateTime(e.candle_ts)}
-              </span>
-            </div>
-            {Object.keys(e.payload).length > 0 && (
-              <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-sm bg-[var(--bg-2)]/40 px-1.5 py-1 font-mono text-[9px] leading-relaxed text-[var(--fg-3)]">
-                {JSON.stringify(e.payload)}
-              </pre>
             )}
-          </div>
-        </li>
-      ))}
+          </span>
+        )
+        return (
+          <li
+            key={e.id}
+            className="relative grid grid-cols-[16px_1fr] gap-2 pb-3 last:pb-0"
+          >
+            <div className="flex flex-col items-center">
+              <span
+                aria-hidden
+                className="mt-1 size-2 rounded-full"
+                style={{ backgroundColor: eventTone }}
+              />
+              {i < events.length - 1 && (
+                <span
+                  aria-hidden
+                  className="mt-0.5 w-px flex-1"
+                  style={{
+                    backgroundColor: `color-mix(in oklch, ${eventTone} 25%, transparent)`,
+                  }}
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-0.5 pb-1">
+              <div className="flex items-baseline justify-between gap-2">
+                {isReview ? (
+                  <button
+                    type="button"
+                    onClick={() => openReviewInChat(e)}
+                    className="cursor-pointer bg-transparent p-0 text-left"
+                    title="abrir revisión completa en el chat"
+                  >
+                    {headerLabel}
+                  </button>
+                ) : (
+                  headerLabel
+                )}
+                <span className="font-mono text-[10px] tabular-nums text-[var(--fg-3)]">
+                  {formatDateTime(e.candle_ts)}
+                </span>
+              </div>
+              {isReview ? (
+                <ReviewEventPayload payload={e.payload} />
+              ) : (
+                Object.keys(e.payload).length > 0 && (
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-sm bg-[var(--bg-2)]/40 px-1.5 py-1 font-mono text-[9px] leading-relaxed text-[var(--fg-3)]">
+                    {JSON.stringify(e.payload)}
+                  </pre>
+                )
+              )}
+            </div>
+          </li>
+        )
+      })}
     </ol>
+  )
+}
+
+/** Construye un TradeReviewPayload (shape consumido por TradeReviewCard) a
+ * partir del setup actual + el evento `review_generated` persistido. Devuelve
+ * null si el payload del evento está incompleto (no expandido por backend
+ * pre-rv2). */
+function buildTradeReviewFromEvent(
+  data: SetupDetailDTO,
+  e: SetupEventDTO,
+): import("@/lib/core/ws").TradeReviewPayload | null {
+  const p = e.payload as Record<string, unknown>
+  const reviewId = typeof p.review_id === "string" ? p.review_id : null
+  const summary = typeof p.summary === "string" ? p.summary : null
+  const rationale = typeof p.rationale === "string" ? p.rationale : null
+  const currentState = p.current_state as
+    | "on_track"
+    | "at_risk"
+    | "reversing"
+    | undefined
+  const recommendation = p.recommendation as
+    | "hold"
+    | "tighten_sl"
+    | "partial_close"
+    | "exit_now"
+    | undefined
+  const triggerKind = p.trigger_kind as
+    | "entry_hit"
+    | "tp_partial"
+    | "time_elapsed"
+    | "price_move"
+    | "approaching_sl"
+    | "regime_change"
+    | undefined
+  const price = typeof p.price_at_review === "number" ? p.price_at_review : null
+  const citations = Array.isArray(p.citations)
+    ? (p.citations as { tool_name: string; snapshot: Record<string, unknown> }[])
+    : []
+
+  // rationale + price son los campos nuevos persistidos en rv2; sin ellos no
+  // podemos construir una TradeReviewCard útil. En ese caso devolvemos null
+  // y el caller deja el click sin efecto visible (el panel ya muestra summary).
+  if (!reviewId || !summary || !rationale || price === null) return null
+  if (!currentState || !recommendation || !triggerKind) return null
+
+  return {
+    review_id: reviewId,
+    setup_id: data.id,
+    symbol: data.symbol,
+    timeframe: data.timeframe,
+    side: data.side as "long" | "short",
+    trigger_kind: triggerKind,
+    trigger_payload: {},
+    current_state: currentState,
+    recommendation,
+    summary,
+    rationale,
+    citations,
+    price_at_review: price,
+    created_at: e.candle_ts,
+  }
+}
+
+// -----------------------------------------------------------------------------
+// review_generated payload renderer (timeline)
+// -----------------------------------------------------------------------------
+
+const REVIEW_REC_LABEL: Record<string, string> = {
+  hold: "mantener",
+  tighten_sl: "ajustar SL",
+  partial_close: "cerrar parcial",
+  exit_now: "salir ya",
+}
+
+const REVIEW_REC_TONE: Record<string, string> = {
+  hold: "var(--fg-3)",
+  tighten_sl: "var(--violet)",
+  partial_close: "var(--amber)",
+  exit_now: "var(--short)",
+}
+
+const REVIEW_STATE_LABEL: Record<string, string> = {
+  on_track: "en rumbo",
+  at_risk: "en riesgo",
+  reversing: "revirtiendo",
+}
+
+function ReviewEventPayload({ payload }: { payload: Record<string, unknown> }) {
+  const summary = typeof payload.summary === "string" ? payload.summary : null
+  const recommendation =
+    typeof payload.recommendation === "string" ? payload.recommendation : null
+  const currentState =
+    typeof payload.current_state === "string" ? payload.current_state : null
+  const triggerKind =
+    typeof payload.trigger_kind === "string" ? payload.trigger_kind : null
+  if (!summary) {
+    // Fallback al JSON crudo si el payload no es shape esperado.
+    return (
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-sm bg-[var(--bg-2)]/40 px-1.5 py-1 font-mono text-[9px] leading-relaxed text-[var(--fg-3)]">
+        {JSON.stringify(payload)}
+      </pre>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1 rounded-sm bg-[var(--bg-2)]/40 px-1.5 py-1">
+      <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider">
+        {currentState && (
+          <span style={{ color: "var(--fg-3)" }}>
+            {REVIEW_STATE_LABEL[currentState] ?? currentState}
+          </span>
+        )}
+        {recommendation && (
+          <>
+            <span style={{ color: "var(--fg-4)" }}>·</span>
+            <span style={{ color: REVIEW_REC_TONE[recommendation] ?? "var(--fg-2)" }}>
+              {REVIEW_REC_LABEL[recommendation] ?? recommendation}
+            </span>
+          </>
+        )}
+        {triggerKind && (
+          <>
+            <span style={{ color: "var(--fg-4)" }}>·</span>
+            <span style={{ color: "var(--fg-4)" }}>{triggerKind}</span>
+          </>
+        )}
+      </div>
+      <p className="text-[11px] leading-snug text-[var(--fg-1)]">{summary}</p>
+    </div>
   )
 }
 
@@ -790,14 +1065,42 @@ function Timeline({ events }: { events: SetupEventDTO[] }) {
 // Helpers
 // -----------------------------------------------------------------------------
 
+/** Para status='cancelled', diferenciamos entre cancel manual, auto-
+ *  invalidación por condición DSL y expiración wall-clock por expires_at,
+ *  inspeccionando el último event terminal. Devuelve null si no es un
+ *  cancel o no podemos discriminar.
+ *
+ *  Las tres causas son legalmente distintas (cancelled = user action,
+ *  invalidated = DSL condition fired, expired = expires_at fence) y la UI
+ *  debe reflejar la diferencia para el post-mortem analysis del usuario. */
+/** Helper para decidir el footer del pending: si el setup es scout y no
+ *  tiene aún un evento `approved`, mostramos los botones Approve/Reject;
+ *  si ya está aprobado (o es agent_proposal), el footer normal de cancelar. */
+function hasApprovalEvent(events: SetupEventDTO[]): boolean {
+  return events.some((e) => e.event === "approved")
+}
+
+function cancelledFlavorLabel(data: SetupDetailDTO): string | null {
+  if (data.status !== "cancelled") return null
+  // El último event determina la causa. Buscamos en reverso por si hay
+  // eventos `review_generated` posteriores al cierre que ocluyan el terminal.
+  for (let i = data.events.length - 1; i >= 0; i--) {
+    const e = data.events[i]!
+    if (e.event === "invalidated") return "auto-invalidado"
+    if (e.event === "expired") return "expirado"
+    if (e.event === "cancelled") return "cancelado"
+  }
+  return null
+}
+
 function targetRMultiples(
   entry: number,
-  invalidation: number | null,
+  stopLoss: number | null,
   side: "long" | "short",
   targets: SetupTargetDTO[],
 ): number[] {
-  if (invalidation === null) return []
-  const risk = Math.abs(entry - invalidation)
+  if (stopLoss === null) return []
+  const risk = Math.abs(entry - stopLoss)
   if (risk === 0) return []
   return targets.map((t) => {
     const reward = side === "long" ? t.price - entry : entry - t.price

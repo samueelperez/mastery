@@ -5,8 +5,8 @@ import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import type { AlertConditionDTO } from "@/lib/api"
-import { summarizeAlertConditions } from "@/lib/format"
+import type { AlertConditionDTO } from "@/lib/core/api"
+import { summarizeAlertConditions } from "@/lib/core/format"
 
 interface AlertCreatedToolOutput {
   alert_id: string

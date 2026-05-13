@@ -31,7 +31,7 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.agent.tools._time import floor_to_timeframe, staleness_warning
-from app.storage.ohlcv_repo import fetch_range
+from app.market.ohlcv.repo import fetch_range
 
 
 class VolumeNode(BaseModel):

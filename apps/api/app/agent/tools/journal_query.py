@@ -11,8 +11,21 @@ from pydantic_ai import Agent, RunContext
 from app.agent.deps import AgentDeps
 from app.agent.tools._envelope import Provenance, ToolResult
 from app.journal.embeddings import INPUT_TYPE_QUERY, embed_one
+from app.journal.repo import hybrid_search
 from app.journal.summary import TradeSummaryInput, build_summary_text
-from app.storage.journal_repo import hybrid_search
+
+
+class PostMortemSummary(BaseModel):
+    """Snippet del post-mortem adjunto a un trade similar. Solo poblado
+    cuando el trade tiene un post-mortem persistido (LEFT JOIN en
+    hybrid_search). Permite al agente ver QUÉ se aprendió del trade
+    análogo además de su outcome numérico."""
+
+    verdict: str
+    lesson_es: str
+    failure_factors: list[str]
+    success_factors: list[str]
+    confidence_calibration: str
 
 
 class SimilarTradeOut(BaseModel):
@@ -26,6 +39,11 @@ class SimilarTradeOut(BaseModel):
     r_multiple: float | None
     summary: str
     rrf_score: float
+    # F5.5: lección extraída tras cerrar el trade (si existe post-mortem).
+    # El agente principal usa esto para detectar patrones recurrentes:
+    # "5 de 7 trades análogos tienen verdict=thesis_broken citando
+    # ema_stack@1h — exigir confirmación adicional".
+    post_mortem: PostMortemSummary | None = None
 
 
 def register_journal_query_tool(agent: Agent[AgentDeps, object]) -> None:
@@ -89,6 +107,17 @@ def register_journal_query_tool(agent: Agent[AgentDeps, object]) -> None:
                 r_multiple=h.r_multiple,
                 summary=h.summary_text,
                 rrf_score=round(h.rrf_score, 4),
+                post_mortem=(
+                    PostMortemSummary(
+                        verdict=h.post_mortem.verdict,
+                        lesson_es=h.post_mortem.lesson_es,
+                        failure_factors=h.post_mortem.failure_factors,
+                        success_factors=h.post_mortem.success_factors,
+                        confidence_calibration=h.post_mortem.confidence_calibration,
+                    )
+                    if h.post_mortem is not None
+                    else None
+                ),
             )
             for h in hits
         ]
