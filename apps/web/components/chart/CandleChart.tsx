@@ -25,6 +25,7 @@ import type {
 } from "@/lib/store/chart-overlays"
 
 import { readChartTokens, withAlpha, type ChartTokens } from "./overlays/colors"
+import { LiquidationHeatmapPrimitive } from "./overlays/LiquidationHeatmapPrimitive"
 import {
   computeBollinger,
   computeEma,
@@ -128,6 +129,10 @@ export function CandleChart({
   const markersPluginRef = useRef<
     ISeriesMarkersPluginApi<Time> | null
   >(null)
+  // Heatmap primitive (HM-PR2). Attached to the candle series via
+  // `series.attachPrimitive()`; `chart.remove()` in the mount cleanup
+  // disposes it automatically, but we also null the ref there.
+  const heatmapPrimitiveRef = useRef<LiquidationHeatmapPrimitive | null>(null)
 
   // Mount + unmount: create / destroy the chart instance.
   useEffect(() => {
@@ -203,6 +208,7 @@ export function CandleChart({
       overlaySeriesMap.clear()
       tradeIdeaRef.current = null
       markersPluginRef.current = null
+      heatmapPrimitiveRef.current = null
       seededRef.current = false
     }
   }, [])
@@ -634,6 +640,41 @@ export function CandleChart({
     }
     structureSeriesRef.current = next
   }, [overlays?.structure, initial, minimalMode])
+
+  // -------------------------------------------------------------------------
+  // OVERLAY: Liquidation heatmap 2D (Cerebro 1 visual — HM-PR2)
+  // Pane primitive attached to the candle series. zOrder='bottom' keeps
+  // the cloud below candles + EMAs + trade idea. When the store says no
+  // heatmap data (toggle off, no snapshots yet), the primitive is
+  // detached entirely — no idle render cost.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const candleSeries = candleSeriesRef.current
+    if (!candleSeries) return
+
+    const heatmap = overlays?.heatmap ?? null
+    const snapshots = heatmap?.snapshots ?? []
+
+    if (snapshots.length === 0) {
+      const existing = heatmapPrimitiveRef.current
+      if (existing) {
+        try {
+          candleSeries.detachPrimitive(existing)
+        } catch {
+          // chart already removed, ignore
+        }
+        heatmapPrimitiveRef.current = null
+      }
+      return
+    }
+
+    if (!heatmapPrimitiveRef.current) {
+      const primitive = new LiquidationHeatmapPrimitive()
+      candleSeries.attachPrimitive(primitive)
+      heatmapPrimitiveRef.current = primitive
+    }
+    heatmapPrimitiveRef.current.setData(snapshots)
+  }, [overlays?.heatmap])
 
   // -------------------------------------------------------------------------
   // OVERLAY: Markers compilados (tradeIdea direccional + structure pivots)

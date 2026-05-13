@@ -3,7 +3,12 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
+import type { HeatmapSnapshotDTO } from "@/lib/api/liquidation"
 import type { Timeframe } from "@/lib/chat/types"
+
+/** Allowed lookback windows for the liquidation heatmap (hours). Matches
+ *  the `lookback_hours` validator of `GET /liquidation/heatmap/.../history`. */
+export type HeatmapLookbackHours = 1 | 6 | 24 | 168
 
 /** Indicadores activos (derivados de get_indicators / get_multi_tf_confluence).
  *  Los VALORES no se guardan — el frontend los recomputa desde los candles
@@ -64,6 +69,23 @@ export interface TradeIdeaOverlay {
   proposedAtSec?: number
 }
 
+/** 2D liquidation heatmap state per symbol. Snapshots viven en memoria
+ *  (no se persisten) — al recargar página, el SWR/react-query hook
+ *  los re-fetcha del backend. */
+export interface LiquidationHeatmapState {
+  /** Time-series de zonas devueltas por el endpoint history. */
+  snapshots: HeatmapSnapshotDTO[]
+  /** ETag del último fetch, para que el siguiente request pueda enviar
+   *  `If-None-Match` y aprovechar 304 si nada cambió. */
+  etag: string | null
+  /** ISO-8601 del snapshot más reciente. Lo pinta el ChartLegend en la
+   *  pill "Liq · 2m ago". */
+  asOf: string | null
+  /** Última ventana solicitada — el hook re-fetcha si el usuario cambia
+   *  el selector de lookback en la sidebar. */
+  lookbackHours: HeatmapLookbackHours
+}
+
 export interface OverlayBundle {
   indicators: IndicatorOverlays
   structure: StructureOverlays | null
@@ -72,6 +94,9 @@ export interface OverlayBundle {
    *  en este array para que el `ChartLegend` muestre `1/N` y permita
    *  alternar. Closed quedan fuera (solo en `/journal`). */
   tradeIdeas: TradeIdeaOverlay[]
+  /** Time-series del heatmap. `null` cuando no se ha fetchado todavía o
+   *  cuando el operador apagó el toggle global. */
+  heatmap: LiquidationHeatmapState | null
 }
 
 export const EMPTY_INDICATORS: IndicatorOverlays = {
@@ -85,6 +110,7 @@ export const EMPTY_BUNDLE: OverlayBundle = {
   indicators: EMPTY_INDICATORS,
   structure: null,
   tradeIdeas: [],
+  heatmap: null,
 }
 
 interface ChartOverlaysState {
@@ -94,6 +120,10 @@ interface ChartOverlaysState {
   /** Modo minimalista global: oculta structure (S/R + pivots) del chart,
    *  manteniendo EMAs y TradeIdea. Persistido entre sesiones. */
   minimalMode: boolean
+
+  /** Liquidation heatmap — user-level preferences (persistidas). */
+  heatmapEnabled: boolean
+  heatmapLookback: HeatmapLookbackHours
 
   /** Reemplaza (no merge) las indicadores del símbolo. */
   setIndicators: (symbol: string, indicators: IndicatorOverlays) => void
@@ -120,6 +150,11 @@ interface ChartOverlaysState {
 
   toggleMinimalMode: () => void
 
+  /** Heatmap setters. */
+  toggleHeatmap: () => void
+  setHeatmapLookback: (hours: HeatmapLookbackHours) => void
+  setHeatmap: (symbol: string, state: LiquidationHeatmapState | null) => void
+
   /** Borra estado del agente (structure + tradeIdea) pero conserva
    *  indicators del usuario. Útil cuando el chat sesiona se renueva. */
   clearAgent: (symbol: string) => void
@@ -131,7 +166,12 @@ function ensureBundle(
   state: { bySymbol: Record<string, OverlayBundle> },
   symbol: string,
 ): OverlayBundle {
-  return state.bySymbol[symbol] ?? { ...EMPTY_BUNDLE }
+  const cur = state.bySymbol[symbol]
+  if (!cur) return { ...EMPTY_BUNDLE }
+  // Defensive merge: si el bundle persistido viene de una versión antigua
+  // y le faltan keys nuevas (heatmap, etc), el spread de EMPTY_BUNDLE
+  // primero garantiza valores por defecto.
+  return { ...EMPTY_BUNDLE, ...cur }
 }
 
 export const useChartOverlays = create<ChartOverlaysState>()(
@@ -139,6 +179,8 @@ export const useChartOverlays = create<ChartOverlaysState>()(
     (set) => ({
       bySymbol: {},
       minimalMode: false,
+      heatmapEnabled: false,
+      heatmapLookback: 24 as HeatmapLookbackHours,
 
   setIndicators: (symbol, indicators) =>
     set((state) => ({
@@ -286,6 +328,18 @@ export const useChartOverlays = create<ChartOverlaysState>()(
 
   toggleMinimalMode: () => set((state) => ({ minimalMode: !state.minimalMode })),
 
+  toggleHeatmap: () => set((state) => ({ heatmapEnabled: !state.heatmapEnabled })),
+
+  setHeatmapLookback: (hours) => set({ heatmapLookback: hours }),
+
+  setHeatmap: (symbol, heatmapState) =>
+    set((state) => ({
+      bySymbol: {
+        ...state.bySymbol,
+        [symbol]: { ...ensureBundle(state, symbol), heatmap: heatmapState },
+      },
+    })),
+
   clearAgent: (symbol) =>
     set((state) => {
       const cur = state.bySymbol[symbol]
@@ -316,6 +370,8 @@ export const useChartOverlays = create<ChartOverlaysState>()(
       // visual del usuario).
       partialize: (state) => ({
         minimalMode: state.minimalMode,
+        heatmapEnabled: state.heatmapEnabled,
+        heatmapLookback: state.heatmapLookback,
         bySymbol: Object.fromEntries(
           Object.entries(state.bySymbol).map(([sym, bundle]) => [
             sym,
@@ -323,6 +379,7 @@ export const useChartOverlays = create<ChartOverlaysState>()(
               indicators: bundle.indicators,
               structure: null,
               tradeIdeas: [],
+              heatmap: null,
             },
           ]),
         ),
@@ -347,6 +404,7 @@ export const useChartOverlays = create<ChartOverlaysState>()(
               EMPTY_INDICATORS,
             structure: null,
             tradeIdeas: [],
+            heatmap: null,
           }
         }
         return {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { OverlayPanel } from "@/components/dashboard/OverlayPanel"
+import { useLiquidationHeatmap } from "@/hooks/useLiquidationHeatmap"
 import { useChartOverlays } from "@/lib/store/chart-overlays"
 
 import { CandleChart } from "./CandleChart"
@@ -28,6 +29,17 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
   // símbolo. Sin esto, recargar la página pierde las zonas aunque
   // `journal_trades` las siga teniendo abiertas.
   useActiveSetupBridge(symbol)
+  // Heatmap del liquidation engine (HM-PR2). El backend solo guarda
+  // snapshots por `1h|4h|1d` — para timeframes intra-hora del chart
+  // (1m, 15m), caemos a `4h` que es el aggregation más útil para
+  // contexto. Lookback (1/6/24/168h) lo controla el usuario desde
+  // OverlayPanel; toggle on/off es persisted preference.
+  const heatmapTf = (["1h", "4h", "1d"] as const).includes(
+    timeframe as "1h" | "4h" | "1d",
+  )
+    ? timeframe
+    : "4h"
+  useLiquidationHeatmap({ symbol, timeframe: heatmapTf })
 
   // Selección activa del switcher — UI-only, no persiste cross-session.
   // Si el array de ideas cambia y la actual ya no existe (setup cerró),
