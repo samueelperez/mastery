@@ -1352,24 +1352,40 @@ def register_validators(
                         f"entry={output.entry}. En short el SL va POR ENCIMA del entry."
                     )
             rr = reward / risk
-            # B.2: per-symbol slippage buffer added on top of the base 1.5 floor.
-            # Crypto perps slip more than the chart suggests; the buffer
-            # raises the NOMINAL R:R required so the post-fill realized
-            # ratio still beats 1.5. Tunable per symbol in Settings.
+            # B.2 / RM-2: base R:R floor now comes from Settings.min_rr_ratio
+            # (single source of truth from M1-Risk sprint); per-symbol
+            # slippage buffer is added on top so the post-fill realized
+            # ratio still beats the configured base.
             from app.core.config import get_settings
 
-            slippage_buffer = get_settings().slippage_buffer_r(output.symbol)
-            min_rr = 1.5 + slippage_buffer
+            cfg = get_settings()
+            slippage_buffer = cfg.slippage_buffer_r(output.symbol)
+            min_rr = cfg.min_rr_ratio + slippage_buffer
             if rr < min_rr:
                 raise ModelRetry(
                     f"R:R al primer TP es {rr:.2f}:1 (reward={reward:.2f} / "
                     f"risk={risk:.2f}). Mínimo aceptable {min_rr:.2f}:1 para "
-                    f"{output.symbol} (1.5 base + {slippage_buffer:.2f} de buffer "
-                    f"por slippage cripto). Mueve el SL más cerca del entry, "
-                    f"ajusta el TP a un nivel más lejano (cita "
-                    f"tool_name=get_market_structure), o cambia "
-                    f"direction='no_trade'. NO propongas trades con esperanza "
-                    f"negativa una vez descontado el slippage real."
+                    f"{output.symbol} ({cfg.min_rr_ratio} base + "
+                    f"{slippage_buffer:.2f} de buffer por slippage cripto). "
+                    f"Mueve el SL más cerca del entry, ajusta el TP a un "
+                    f"nivel más lejano (cita tool_name=get_market_structure), "
+                    f"o cambia direction='no_trade'. NO propongas trades con "
+                    f"esperanza negativa una vez descontado el slippage real."
+                )
+
+            # RM-2: max-leverage hard gate (Settings.max_leverage_per_position).
+            # Pure-function gate from app/risk/gates.py — reused so the
+            # threshold lives in exactly one place. Reject (not size-reduce)
+            # so the LLM knows it must propose a smaller leverage.
+            from app.risk.gates import max_leverage_gate
+
+            lev_outcome = max_leverage_gate(output, cfg)
+            if not lev_outcome.passed:
+                raise ModelRetry(
+                    f"Risk gate '{lev_outcome.name}' rechazó este setup: "
+                    f"{lev_outcome.reason}. Reduce `leverage_x` a un valor "
+                    f"≤ {cfg.max_leverage_per_position:g} y resubmite. La "
+                    f"política está fijada en Settings (M1-Risk sprint)."
                 )
 
         # Validator B — LVN check sobre targets (FASE 1: soft-warn).

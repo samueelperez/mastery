@@ -52,6 +52,8 @@ from app.core.observability.metrics import (
     setup_approval_outcome_total,
 )
 from app.liquidation.factor_snapshot import find_heatmap_citation_snapshot
+from app.risk.gates import daily_loss_gate, max_drawdown_gate
+from app.risk.state import fetch_portfolio_snapshot
 from app.setups.repo import insert_setup_from_idea
 from app.setups.risk_manager import fetch_atr_for_trailing
 from app.setups.scout_agent import get_scout_agent
@@ -72,6 +74,8 @@ DropReason = Literal[
     "cooldown_paused",
     "rate_limit_symbol",
     "rate_limit_daily",
+    "daily_loss_freeze",
+    "drawdown_circuit",
     "quality_floor_confidence",
     "quality_floor_direction",
     "dedup_similar_pending",
@@ -274,6 +278,37 @@ async def dispatch_scout_match(
             "rate_limit_daily",
             f"{n_24h} propuestas en 24h (max {MAX_PROPOSALS_PER_DAY})",
         )
+
+    # --- 2.5. Portfolio risk gates (RM-3) ------------------------------------
+    # Daily-loss freeze + drawdown circuit are evaluated BEFORE the LLM is
+    # called: we don't spend tokens proposing a setup the policy would
+    # reject. The fetch is one round-trip (CTE) so latency is bounded.
+    cfg = get_settings()
+    async with session_scope() as session:
+        snap = await fetch_portfolio_snapshot(session, user_id=user_id)
+    if snap.equity_usd > 0:
+        dd_outcome = max_drawdown_gate(
+            current_equity_usd=snap.equity_usd,
+            high_watermark_usd=snap.high_watermark_usd,
+            settings=cfg,
+        )
+        if not dd_outcome.passed:
+            bound_log.info(
+                "scout.dropped.drawdown_circuit",
+                **dd_outcome.metadata,
+            )
+            return _drop("drawdown_circuit", dd_outcome.reason)
+        dl_outcome = daily_loss_gate(
+            realized_pnl_last_24h_usd=snap.realized_pnl_last_24h_usd,
+            equity_usd=snap.equity_usd,
+            settings=cfg,
+        )
+        if not dl_outcome.passed:
+            bound_log.info(
+                "scout.dropped.daily_loss_freeze",
+                **dl_outcome.metadata,
+            )
+            return _drop("daily_loss_freeze", dl_outcome.reason)
 
     # --- 3. Agent invocation --------------------------------------------------
     deps = AgentDeps(
