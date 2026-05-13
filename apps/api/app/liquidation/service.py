@@ -15,6 +15,11 @@ from datetime import UTC, datetime
 from typing import Any, Final
 
 from app.agent.tools._envelope import Provenance
+from app.core.observability.metrics import (
+    liq_provider_errors_total,
+    liq_snapshot_latency_seconds,
+    liq_snapshots_total,
+)
 from app.liquidation.models import (
     ConfidenceLiteral,
     HeatmapSnapshot,
@@ -85,13 +90,17 @@ class HeatmapService:
         for p, result in provider_results:
             if isinstance(result, BaseException):
                 warnings.append(f"provider_failed:{p.name}")
+                kind = "timeout" if isinstance(result, asyncio.TimeoutError) else "exception"
+                liq_provider_errors_total.labels(provider=p.name, kind=kind).inc()
                 continue
             if self._is_stale(result, max_age_s=p.max_age_seconds, now=now):
                 warnings.append(f"provider_stale:{p.name}")
+                liq_provider_errors_total.labels(provider=p.name, kind="stale").inc()
                 continue
             active_outputs.append(result)
 
         if not active_outputs:
+            liq_snapshots_total.labels(symbol=symbol, timeframe=timeframe, outcome="empty").inc()
             return self._empty_snapshot(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -156,6 +165,9 @@ class HeatmapService:
                 extra={"symbol": symbol, "timeframe": timeframe},
             )
 
+        outcome = "degraded" if len(active_outputs) < 2 else "ok"
+        liq_snapshots_total.labels(symbol=symbol, timeframe=timeframe, outcome=outcome).inc()
+
         return snapshot
 
     # ----------------------------------------------------------
@@ -171,6 +183,7 @@ class HeatmapService:
         async def _call(
             p: BaseLiquidationProvider,
         ) -> ProviderHeatmap | BaseException:
+            start = asyncio.get_event_loop().time()
             try:
                 return await asyncio.wait_for(
                     p.get_heatmap(symbol, timeframe, current_price, max_distance_pct),
@@ -178,6 +191,10 @@ class HeatmapService:
                 )
             except Exception as e:
                 return e
+            finally:
+                liq_snapshot_latency_seconds.labels(provider=p.name).observe(
+                    asyncio.get_event_loop().time() - start
+                )
 
         results = await asyncio.gather(*(_call(p) for p in self._providers))
         return list(zip(self._providers, results, strict=True))

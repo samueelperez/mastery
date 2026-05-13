@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.core.exchanges.hyperliquid_symbols import INTERNAL_TO_HYPERLIQUID
+from app.core.observability.metrics import liq_active_addresses
 from app.liquidation.providers._hyperliquid_client import HyperliquidClient
 
 LOG = logging.getLogger(__name__)
@@ -150,3 +151,11 @@ class HyperliquidAddressBootstrap:
                 [{"addr": a, "now": now, "tag": tag} for a in addresses],
             )
             await session.commit()
+            # Refresh active-addresses gauge. Single SELECT after each upsert
+            # batch — cheap and gives near-real-time visibility into universe
+            # growth without a separate polling loop.
+            count_row = await session.execute(
+                text("SELECT COUNT(*) FROM hyperliquid_known_addresses")
+            )
+            total = count_row.scalar_one() or 0
+            liq_active_addresses.set(float(total))
