@@ -37,6 +37,10 @@ export function OverlayPanel({ symbol }: OverlayPanelProps) {
   const clearAgent = useChartOverlays((s) => s.clearAgent)
   const clear = useChartOverlays((s) => s.clear)
   const toggleMinimalMode = useChartOverlays((s) => s.toggleMinimalMode)
+  const heatmapEnabled = useChartOverlays((s) => s.heatmapEnabled)
+  const heatmapLookback = useChartOverlays((s) => s.heatmapLookback)
+  const toggleHeatmap = useChartOverlays((s) => s.toggleHeatmap)
+  const setHeatmapLookback = useChartOverlays((s) => s.setHeatmapLookback)
 
   const count = countActiveLayers(bundle)
   const ind = bundle?.indicators
@@ -138,7 +142,40 @@ export function OverlayPanel({ symbol }: OverlayPanelProps) {
               active={ind?.vwap}
               onClick={() => toggleVwap(symbol)}
             />
+            <Chip
+              label="Liquidation"
+              dotClass="bg-gradient-to-r from-[rgb(16,96,168)] via-[rgb(230,184,40)] to-[rgb(226,50,50)]"
+              active={heatmapEnabled}
+              onClick={toggleHeatmap}
+            />
           </div>
+          {heatmapEnabled && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--fg-3)]">
+                lookback
+              </span>
+              <div className="flex gap-1">
+                {([1, 6, 24, 168] as const).map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setHeatmapLookback(h)}
+                    aria-pressed={heatmapLookback === h}
+                    className={cn(
+                      "rounded border border-border px-2 py-0.5",
+                      "font-mono text-[10px] uppercase tracking-[0.12em]",
+                      "transition-colors",
+                      heatmapLookback === h
+                        ? "bg-[var(--violet-soft)] text-foreground"
+                        : "text-[var(--fg-2)] hover:text-foreground",
+                    )}
+                  >
+                    {h === 168 ? "7d" : `${h}h`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* EMAs/SMAs custom que el agente haya añadido fuera de los presets */}
           {ind && (
             <CustomIndicators
