@@ -1,0 +1,184 @@
+{
+  "uid": "agent-latency",
+  "title": "Agent latency & invocations",
+  "tags": ["trading-copilot", "agent", "ops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Invocations per hour by kind",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "stacking": {"mode": "normal"},
+            "fillOpacity": 25
+          }
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["sum"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind) (rate(mt_agent_invocations_total[5m])) * 3600",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "description": "Agent runs per hour by kind (chat | scout | review | post_mortem). Stacked so total throughput is the height of the area."
+    },
+    {
+      "id": 2,
+      "title": "Latency p50/p95/p99 by kind",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 15},
+              {"color": "red", "value": 45}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le, kind) (rate(mt_agent_invocation_seconds_bucket[5m])))",
+          "legendFormat": "p50 · {{kind}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, kind) (rate(mt_agent_invocation_seconds_bucket[5m])))",
+          "legendFormat": "p95 · {{kind}}"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(mt_agent_invocation_seconds_bucket[5m])))",
+          "legendFormat": "p99 · {{kind}}"
+        }
+      ],
+      "description": "Wall time of one agent run. Buckets in metrics.py go up to 90s — p99 saturating at 90 means the tail is past 90s and we need a wider bucket set."
+    },
+    {
+      "id": 3,
+      "title": "Outcome mix per kind (24h)",
+      "type": "barchart",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "stacking": {"mode": "normal"}
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind, outcome) (increase(mt_agent_invocations_total[24h]))",
+          "legendFormat": "{{kind}} · {{outcome}}",
+          "format": "table"
+        }
+      ],
+      "description": "Outcome distribution per kind. outcome ∈ {trade_idea, brief, text, error}. A high `error` share for any kind means rollback needed."
+    },
+    {
+      "id": 4,
+      "title": "Scout drop reasons (24h)",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "orange", "value": 20}
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (increase(mt_scout_drops_total[24h]))",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "description": "Why the scout dispatcher dropped a match. Concentrations indicate which gate is dominating (cooldown / rate_limit / quality_floor / dedup / persist)."
+    },
+    {
+      "id": 5,
+      "title": "Setup approval outcomes (24h)",
+      "type": "piechart",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(mt_setup_approval_outcome_total[24h]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "description": "Distribution of approval outcomes. `timeout` rate >25% over 7 days means the operator can't react inside APPROVAL_TIMEOUT_SECONDS — raise the threshold or widen auto-approve."
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}
