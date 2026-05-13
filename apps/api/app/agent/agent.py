@@ -45,8 +45,15 @@ from app.liquidation.tool import register_liquidation_tool
 # automatically in F1 — F2 will surface a UI selector.
 DEFAULT_MODEL_ID = "anthropic/claude-sonnet-4.6"
 
+# Scout model (Cerebro 1 — Day 5+). Haiku 4.5 is ~10× cheaper than Sonnet 4.6
+# for the scout's narrow use case (single-rule trigger → propose/skip). Cost
+# matters here because scouts can fire dozens of times per day across alerts.
+SCOUT_MODEL_ID = "anthropic/claude-haiku-4.5"
 
-def build_agent() -> Agent[AgentDeps, BriefAnalysis | TradeIdea | str]:
+
+def build_agent(
+    model_id: str = DEFAULT_MODEL_ID,
+) -> Agent[AgentDeps, BriefAnalysis | TradeIdea | str]:
     api_key = get_settings().openrouter_api_key
     if not api_key:
         raise RuntimeError(
@@ -56,7 +63,7 @@ def build_agent() -> Agent[AgentDeps, BriefAnalysis | TradeIdea | str]:
     # Explicit provider so the key flows from Settings (which read from .env),
     # not from os.environ — the latter would only work when uvicorn auto-loads it.
     model = OpenRouterModel(
-        DEFAULT_MODEL_ID,
+        model_id,
         provider=OpenRouterProvider(api_key=api_key),
     )
     cfg = get_settings()

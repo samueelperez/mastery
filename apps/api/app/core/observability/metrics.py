@@ -106,6 +106,19 @@ setup_transitions_total = Counter(
     ["from_status", "to_status", "event"],
 )
 
+# Counts how each scout-proposed setup resolves its approval gate.
+# outcome ∈ {approved, rejected, timeout, auto_approved}.
+# - approved / rejected: human pulled the trigger in Telegram or web.
+# - auto_approved: dispatcher bypassed the human step because all gates were
+#   green and sources_agreement met the AUTO_APPROVE_MIN_AGREEMENT threshold.
+# - timeout: scheduler cancelled the setup after APPROVAL_TIMEOUT_SECONDS
+#   without operator response (wiring pending — knob exposed in Settings).
+setup_approval_outcome_total = Counter(
+    "mt_setup_approval_outcome_total",
+    "Setup approval resolutions by outcome.",
+    ["outcome"],
+)
+
 
 # -----------------------------------------------------------------------------
 # Runtime health (alerts/setups/risk runtimes alive)

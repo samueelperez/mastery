@@ -134,9 +134,12 @@ class Settings(BaseSettings):
     holdout_pct: int = Field(default=15, alias="HOLDOUT_PCT")
 
     # ---- F4 — Paper trading engine -----------------------------------------
-    # Master flag. Default False — entry/exit en setups/runtime persiste los
-    # transitions pero NO toca paper_positions. Activar tras smoke test.
-    paper_trading_enabled: bool = Field(default=False, alias="PAPER_TRADING_ENABLED")
+    # Master flag. Default True desde M1-polish — el motor está integrado en
+    # SetupRuntime (`_maybe_paper_open` / `_maybe_paper_close`) y los errores
+    # se absorben con `except Exception` para no romper transitions. En testnet
+    # no hay riesgo real; activarlo genera el histórico que necesitamos para
+    # calibración M2. Override via PAPER_TRADING_ENABLED=False en CI o tests.
+    paper_trading_enabled: bool = Field(default=True, alias="PAPER_TRADING_ENABLED")
     # Equity inicial por user al hacer init_balance. Configurable para tests.
     paper_initial_equity_usd: float = Field(
         default=10_000.0, alias="PAPER_INITIAL_EQUITY_USD"
@@ -179,6 +182,28 @@ class Settings(BaseSettings):
     # escape hatch if the system drifts.
     ground_truth_collection_enabled: bool = Field(
         default=True, alias="GROUND_TRUTH_COLLECTION_ENABLED"
+    )
+
+    # ---- M1-polish — approval flow tuning -----------------------------------
+    # Telegram approval window. PLAN_MAESTRO's original 90s is too aggressive
+    # for a single-developer operator who isn't glued to the phone; 10min is
+    # the realistic upper bound before a setup goes stale at scout latencies.
+    # Enforcement task is a follow-up (no scheduler scans pending+expired yet);
+    # exposing the knob now lets ops tune as soon as the scheduler lands.
+    approval_timeout_seconds: int = Field(
+        default=600, alias="APPROVAL_TIMEOUT_SECONDS"
+    )
+    # Auto-approve gate. When a scout-proposed TradeIdea cites a heatmap zone
+    # with very high cross-provider agreement AND already passes every hard
+    # gate (R:R, slippage, factor LCB), bypass the human-in-loop step. The
+    # operator gets a notification *after* the fact instead of an interactive
+    # button — this is the M1 form of progressive autonomy, narrower than
+    # the M2 "auto-approve confidence='medium'" tier.
+    auto_approve_min_agreement: float = Field(
+        default=0.90, alias="AUTO_APPROVE_MIN_AGREEMENT"
+    )
+    auto_approve_min_confidence: str = Field(
+        default="high", alias="AUTO_APPROVE_MIN_CONFIDENCE"
     )
 
     # ---- B.2 — Slippage buffer (pre-trade R:R gate) -----------------------

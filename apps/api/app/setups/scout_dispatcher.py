@@ -29,6 +29,7 @@ Every drop emits a structured log with the reason; verdicts are auditable.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -38,19 +39,22 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.agent import get_agent
 from app.agent.deps import AgentDeps
 from app.agent.models import TradeIdea
 from app.alerts.cooldown import should_pause_scout
+from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.observability.metrics import (
     agent_invocation_seconds,
     agent_invocations_total,
     scout_accepted_total,
     scout_drops_total,
+    setup_approval_outcome_total,
 )
+from app.liquidation.factor_snapshot import find_heatmap_citation_snapshot
 from app.setups.repo import insert_setup_from_idea
 from app.setups.risk_manager import fetch_atr_for_trailing
+from app.setups.scout_agent import get_scout_agent
 
 log = structlog.get_logger(__name__)
 
@@ -116,7 +120,7 @@ async def _count_active_setups_for_symbol(
                 SELECT COUNT(*) AS n
                 FROM journal_trades
                 WHERE user_id = :uid
-                  AND source = 'agent_proposal'
+                  AND source IN ('agent_proposal', 'scout_proposal')
                   AND symbol = :sym
                   AND status IN ('pending', 'active')
                 """
@@ -137,7 +141,7 @@ async def _count_proposals_in_last_24h(
                 SELECT COUNT(*) AS n
                 FROM journal_trades
                 WHERE user_id = :uid
-                  AND source = 'agent_proposal'
+                  AND source IN ('agent_proposal', 'scout_proposal')
                   AND proposed_at >= now() - interval '24 hours'
                 """
             ),
@@ -167,7 +171,7 @@ async def _find_similar_open_setup(
                 SELECT id::text AS id
                 FROM journal_trades
                 WHERE user_id = :uid
-                  AND source = 'agent_proposal'
+                  AND source IN ('agent_proposal', 'scout_proposal')
                   AND symbol = :sym
                   AND side = :side
                   AND status IN ('pending', 'active')
@@ -282,7 +286,10 @@ async def dispatch_scout_match(
     )
     started = time.monotonic()
     try:
-        result = await get_agent().run(user_message, deps=deps)
+        # Dedicated Haiku 4.5 agent (PR-07 / ADR-003). Same tool catalogue
+        # and validators as the main chat agent; the cost difference (~10×)
+        # is the entire point of the migration.
+        result = await get_scout_agent().run(user_message, deps=deps)
     except Exception as exc:
         agent_invocation_seconds.labels(kind="scout").observe(
             time.monotonic() - started
@@ -392,20 +399,41 @@ async def dispatch_scout_match(
         confidence=output.confidence,
     )
 
+    # --- 7. Auto-approve gate (M1-polish) ------------------------------------
+    # When the proposed setup carries very-high agreement on the heatmap AND
+    # the agent emitted confidence='high', the human-in-loop step is bypassed.
+    # The operator still gets a fire-and-forget notification (so they know
+    # what fired) but the interactive Approve/Reject buttons are skipped.
+    auto_approved = await _maybe_auto_approve(
+        setup_id=setup_id, idea=output, log=bound_log
+    )
+
     # C.3 — Telegram notification fire-and-forget. Failure (no token, network
     # error, user unlinked) NEVER blocks the dispatch — the setup is already
     # persisted and visible in the UI. send_setup_alert swallows its own
     # exceptions and logs them.
     try:
         from app.notifications.repo import get_telegram_chat_id
-        from app.notifications.telegram import send_setup_alert
+        from app.notifications.telegram import send_setup_alert, send_text
 
         async with session_scope() as session:
             chat_id = await get_telegram_chat_id(session, user_id=user_id)
         if chat_id:
-            await send_setup_alert(
-                chat_id=chat_id, setup_id=setup_id, idea=output
-            )
+            if auto_approved:
+                # Auto-approved: send a plain notification, no buttons. The
+                # operator can still cancel via the web UI; the regular
+                # SetupRuntime watcher handles activation on entry hit.
+                await send_text(
+                    chat_id,
+                    f"🤖 Auto-approved {output.direction.upper()} "
+                    f"{output.symbol} {output.timeframe} "
+                    f"(confidence={output.confidence}, "
+                    f"agreement≥{settings_snapshot_agreement(output)}).",
+                )
+            else:
+                await send_setup_alert(
+                    chat_id=chat_id, setup_id=setup_id, idea=output
+                )
     except Exception as exc:
         bound_log.warning(
             "scout.notify_failed",
@@ -419,3 +447,86 @@ async def dispatch_scout_match(
         drop_reason=None,
         detail=None,
     )
+
+
+# -----------------------------------------------------------------------------
+# Auto-approve helpers
+# -----------------------------------------------------------------------------
+
+
+def _heatmap_agreement(idea: TradeIdea) -> float | None:
+    """Pull `sources_agreement` from the heatmap citation on a TradeIdea.
+    None when the idea didn't cite the heatmap (e.g. no Cerebro 1 zone) or
+    the citation snapshot lacks the field."""
+    snap = find_heatmap_citation_snapshot(idea)
+    if snap is None:
+        return None
+    raw = snap.get("sources_agreement")
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def settings_snapshot_agreement(idea: TradeIdea) -> str:
+    """Render the agreement value (or '—') for the Telegram notification."""
+    a = _heatmap_agreement(idea)
+    return f"{a:.2f}" if a is not None else "—"
+
+
+async def _maybe_auto_approve(
+    *,
+    setup_id: str,
+    idea: TradeIdea,
+    log: Any,
+) -> bool:
+    """Insert an `approved` event with payload marking the auto-approval
+    when the idea satisfies the configured gate. Returns True iff the
+    setup was auto-approved (caller adjusts the Telegram notification
+    accordingly).
+
+    Idempotency-safe — the existing partial unique index
+    `setup_events_unique_user_decision` (migration 021) prevents double
+    inserts; if a manual `/approve` raced ahead we silently treat as
+    already-approved.
+    """
+    cfg = get_settings()
+    if idea.confidence != cfg.auto_approve_min_confidence:
+        return False
+    agreement = _heatmap_agreement(idea)
+    if agreement is None or agreement < cfg.auto_approve_min_agreement:
+        return False
+
+    payload = {
+        "approver": "scout_auto",
+        "auto": True,
+        "agreement": agreement,
+        "confidence": idea.confidence,
+    }
+    try:
+        async with session_scope() as session:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO setup_events (trade_id, event, candle_ts, payload)
+                    VALUES (CAST(:tid AS uuid), 'approved', now(), CAST(:payload AS jsonb))
+                    ON CONFLICT DO NOTHING
+                    """
+                ),
+                {"tid": setup_id, "payload": json.dumps(payload)},
+            )
+    except Exception as exc:  # pragma: no cover — defensive against DB hiccups
+        log.warning(
+            "scout.auto_approve_failed",
+            setup_id=setup_id,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        return False
+    setup_approval_outcome_total.labels(outcome="auto_approved").inc()
+    log.info(
+        "scout.auto_approved",
+        setup_id=setup_id,
+        agreement=agreement,
+        confidence=idea.confidence,
+    )
+    return True

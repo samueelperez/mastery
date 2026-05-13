@@ -189,7 +189,7 @@ async def test_scout_to_setup_to_approval_smoke(
     await _require_db()
 
     # Mock the agent so we don't hit OpenRouter.
-    monkeypatch.setattr(scout_dispatcher, "get_agent", lambda: _MockAgent())
+    monkeypatch.setattr(scout_dispatcher, "get_scout_agent", lambda: _MockAgent())
 
     # Snapshot of starting counter values so we can assert deltas.
     accepted_before = scout_accepted_total._value.get()  # type: ignore[attr-defined]
@@ -285,7 +285,7 @@ async def test_scout_drop_increments_counter(
         async def run(self, _msg: str, deps: Any = None) -> _MockResult:
             return _MockResult(no_trade_idea)
 
-    monkeypatch.setattr(scout_dispatcher, "get_agent", lambda: _NoTradeAgent())
+    monkeypatch.setattr(scout_dispatcher, "get_scout_agent", lambda: _NoTradeAgent())
 
     drops_before = scout_dispatcher.scout_drops_total.labels(
         reason="quality_floor_direction"
