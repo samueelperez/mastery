@@ -192,7 +192,11 @@ class ProviderWeight(BaseModel):
     symbol: str
     timeframe: TimeframeLiteral
     provider: ProviderName
-    weight: float = Field(ge=0.10, le=1.0)
+    # Post-normalize weights can dip below WEIGHT_FLOOR=0.10 (e.g. a provider
+    # at floor + another at rate=1.0 yields 0.10/1.10 ≈ 0.091). The floor is
+    # enforced on the RAW rate inside calibration; the stored weight is the
+    # normalized value, which by construction is in [0, 1].
+    weight: float = Field(ge=0.0, le=1.0)
     agreement_rate: float = Field(ge=0.0, le=1.0)
     n_samples: int = Field(ge=0)
     computed_at: datetime
