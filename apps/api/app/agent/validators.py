@@ -35,6 +35,12 @@ from pydantic_ai.messages import (
 from app.agent.deps import AgentDeps
 from app.agent.models import BiasAlert, BriefAnalysis, ToolCitation, TradeIdea
 from app.backtest.factor_stats_repo import evaluate_factor_gate
+from app.liquidation.factor_snapshot import (
+    enrich_with_provider_breakdown as _enrich_heatmap_snapshot,
+)
+from app.liquidation.factor_snapshot import (
+    find_heatmap_citation_snapshot as _find_heatmap_citation_snapshot,
+)
 from app.setups.events import persist_trade_idea
 
 # Pattern for tool-name leakage in user-facing prose. Cualquier referencia a
@@ -541,27 +547,44 @@ def _build_factor_snapshot(
     output: object,
 ) -> dict[str, object] | None:
     """Construye el dict `factor_snapshot` que se persistirá en
-    `journal_trades.factor_snapshot`. Devuelve None si get_multi_tf_confluence
-    no se llamó este turno (sin scorer data no hay snapshot deterministic).
+    `journal_trades.factor_snapshot`. Devuelve None si ningún cerebro citado
+    este turno produjo data persistible (ni `get_multi_tf_confluence` ni
+    `get_liquidation_heatmap`).
 
     Shape (version=1):
         {
           "version": 1,
           "captured_at": ISO ts,
-          "deterministic": {
+          "deterministic"?: {
             "by_tf": {"1h": {"ema_stack": .., ...}, "4h": {...}, ...},
             "aggregate_bias": "bull"|"bear"|"range",
             "aggregate_agreement_pct": float
-          },
+          },                                       # presente si confluence se llamó
           "semantic_tags": [...] (allow-list filtered),
-          "context": {"regime_label": "...", "entry_tf": "..."}
+          "context": {"regime_label": "...", "entry_tf": "..."},
+          "get_liquidation_heatmap"?: {
+            "symbol": ...,
+            "current_price": ...,
+            "sources_agreement": ...,
+            "sources_used": [...],
+            "nearest_long_liq_price"? | "nearest_short_liq_price"?,
+            "timeframe"?, "source_breakdown_a_price"?,
+            "source_breakdown_b_price"?
+          }                                        # presente si Cerebro 1 fue citado
         }
     """
     cdata = _collect_latest_confluence_data(messages)
-    if cdata is None:
-        return None
 
-    deterministic = _confluence_to_deterministic_snapshot(cdata)
+    # Cerebro 1: si la TradeIdea cita `get_liquidation_heatmap`, persistimos
+    # la snapshot enriquecida con per-provider price breakdown. Sin esto el
+    # handler de Telegram `record_ground_truth` loguea
+    # `gt_no_heatmap_citation` y la calibración M2 llega sin signal.
+    heatmap_snap = _find_heatmap_citation_snapshot(output)
+    if heatmap_snap is not None:
+        heatmap_snap = _enrich_heatmap_snapshot(heatmap_snap, messages)
+
+    if cdata is None and heatmap_snap is None:
+        return None
 
     # semantic_tags solo existen en TradeIdea (no en BriefAnalysis). Acceso
     # defensivo por si el caller pasa otro modelo.
@@ -574,16 +597,21 @@ def _build_factor_snapshot(
     regime_label = getattr(getattr(output, "regime", None), "label", None)
     entry_tf = getattr(output, "timeframe", None)
 
-    return {
+    out: dict[str, object] = {
         "version": 1,
         "captured_at": datetime.now(tz=UTC).isoformat(),
-        "deterministic": deterministic,
         "semantic_tags": semantic_tags,
         "context": {
             "regime_label": regime_label,
             "entry_tf": entry_tf,
         },
     }
+    if cdata is not None:
+        out["deterministic"] = _confluence_to_deterministic_snapshot(cdata)
+    if heatmap_snap is not None:
+        out["get_liquidation_heatmap"] = heatmap_snap
+
+    return out
 
 
 def _extract_aggregate_bias(
