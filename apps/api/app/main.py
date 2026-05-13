@@ -21,6 +21,8 @@ from app.liquidation.providers._hyperliquid_bootstrap import (
     HyperliquidAddressBootstrap,
 )
 from app.liquidation.providers._hyperliquid_client import HyperliquidClient
+from app.liquidation.routes import router as liquidation_router
+from app.liquidation.scheduler import LiquidationSnapshotScheduler
 from app.market.ohlcv.ingestion_live import LiveIngestion
 from app.market.ohlcv.routes import router as ohlcv_router
 from app.market.ws_routes import router as ws_router
@@ -60,15 +62,25 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         client=hl_client,
         watch_symbols=list(settings.watch_symbol_list),
     )
+    # Cerebro 1 — snapshot scheduler (HM-PR1). Populates `liquidation_buckets`
+    # densely so the 2D heatmap UI has real history to render. Shares the
+    # HL client with the bootstrap to avoid duplicate connections.
+    liq_scheduler = LiquidationSnapshotScheduler(
+        session_factory=db_module._sessionmaker,  # type: ignore[arg-type]
+        hl_client=hl_client,
+        watch_symbols=list(settings.watch_symbol_list),
+    )
     await ingestion.start()
     await alerts.start()
     await setups.start()
     await hl_bootstrap.start()
+    await liq_scheduler.start()
     log.info("api.start")
     try:
         yield
     finally:
         log.info("api.stop")
+        await liq_scheduler.stop()
         await hl_bootstrap.stop()
         await hl_client.close()
         await setups.stop()
@@ -105,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(alerts_router)
     app.include_router(setups_router)
     app.include_router(notifications_router)
+    app.include_router(liquidation_router)
     return app
 
 

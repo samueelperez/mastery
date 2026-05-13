@@ -159,3 +159,17 @@ liq_provider_errors_total = Counter(
     "Provider failures inside HeatmapService.",
     ["provider", "kind"],  # kind ∈ {timeout, exception, stale}
 )
+
+# Background snapshot scheduler (HM-PR1).
+liq_scheduler_runs_total = Counter(
+    "mt_liq_scheduler_runs_total",
+    "LiquidationSnapshotScheduler run outcomes per (symbol, timeframe, outcome).",
+    ["symbol", "timeframe", "outcome"],  # outcome ∈ {ok, empty, error, no_price}
+)
+
+liq_scheduler_latency_seconds = Histogram(
+    "mt_liq_scheduler_latency_seconds",
+    "Wall time for a single scheduled HeatmapService.get_snapshot call.",
+    ["symbol", "timeframe"],
+    buckets=(0.5, 1.0, 2.0, 3.0, 5.0, 10.0),
+)
