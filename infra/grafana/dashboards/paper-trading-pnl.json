@@ -1,0 +1,211 @@
+{
+  "uid": "paper-trading-pnl",
+  "title": "Paper trading PnL",
+  "tags": ["trading-copilot", "paper-trading", "pnl"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "pg",
+        "type": "datasource",
+        "query": "postgres",
+        "current": {
+          "selected": false,
+          "text": "Postgres",
+          "value": "Postgres"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Equity curve (USD)",
+      "type": "timeseries",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 20
+          }
+        }
+      },
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "min", "max"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, user_id AS metric, equity_usd::float AS value FROM paper_equity_snapshots WHERE ts >= NOW() - INTERVAL '30 days' ORDER BY ts"
+        }
+      ],
+      "description": "Per-user paper equity over time. Each user is a series so multi-account paper experiments are distinguishable."
+    },
+    {
+      "id": 2,
+      "title": "Realized PnL by symbol (30d)",
+      "type": "barchart",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT symbol AS metric, SUM(realized_pnl_usd)::float AS value FROM paper_positions WHERE status = 'closed' AND closed_at >= NOW() - INTERVAL '30 days' GROUP BY symbol ORDER BY value DESC"
+        }
+      ],
+      "description": "30-day realized PnL by symbol. Net contribution per pair to the overall paper performance."
+    },
+    {
+      "id": 3,
+      "title": "Win-rate rolling (30 trades)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.45},
+              {"color": "green", "value": 0.55}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "WITH closed AS (SELECT closed_at, (realized_pnl_usd > 0)::int AS win FROM paper_positions WHERE status='closed' AND closed_at IS NOT NULL ORDER BY closed_at) SELECT closed_at AS time, AVG(win) OVER (ORDER BY closed_at ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)::float AS value, 'rolling_30' AS metric FROM closed ORDER BY closed_at"
+        }
+      ],
+      "description": "Rolling win-rate over the last 30 closed paper trades. Edge claim < 55% is statistical noise; ≥ 55% with consistent expectancy is real."
+    },
+    {
+      "id": 4,
+      "title": "Drawdown from HWM (%)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": -30,
+          "max": 0,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 25
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": -5},
+              {"color": "orange", "value": -10},
+              {"color": "red", "value": -15}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "WITH eq AS (SELECT ts, user_id, equity_usd::float AS equity FROM paper_equity_snapshots WHERE ts >= NOW() - INTERVAL '30 days') SELECT ts AS time, user_id AS metric, ((equity - MAX(equity) OVER (PARTITION BY user_id ORDER BY ts)) / NULLIF(MAX(equity) OVER (PARTITION BY user_id ORDER BY ts), 0)) * 100 AS value FROM eq ORDER BY ts"
+        }
+      ],
+      "description": "Drawdown as percent below the running high-watermark. Settings cap is -10% (max_drawdown_circuit_pct); breach should circuit-break the system."
+    },
+    {
+      "id": 5,
+      "title": "Open positions",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 18},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 10}
+            ]
+          }
+        }
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM paper_positions WHERE status='open'"
+        }
+      ],
+      "description": "Active paper positions across all users. Cap implied by max_gross_leverage in M2 RiskManager work."
+    },
+    {
+      "id": 6,
+      "title": "Avg R per closed setup",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 18},
+      "datasource": {"type": "postgres", "uid": "${pg}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT NOW() AS time, AVG(r_multiple)::float AS value FROM journal_trades WHERE status='closed' AND r_multiple IS NOT NULL AND closed_at >= NOW() - INTERVAL '30 days'"
+        }
+      ],
+      "description": "Average R-multiple across the last 30 days of closed trades. Trade quality summary — positive expectancy starts around +0.25R."
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

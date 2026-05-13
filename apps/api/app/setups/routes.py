@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.auth import require_user_id
 from app.core.db import session_scope
+from app.core.observability.metrics import setup_approval_outcome_total
 
 log = structlog.get_logger("api.setups")
 router = APIRouter()
@@ -93,6 +94,7 @@ async def approve_setup(
             log.info("setup.approve.race_won_by_other", trade_id=trade_id)
             return {"status": "already_approved", "trade_id": trade_id}
     log.info("setup.approved", trade_id=trade_id, user_id=user_id)
+    setup_approval_outcome_total.labels(outcome="approved").inc()
     return {"status": "approved", "trade_id": trade_id}
 
 
@@ -190,4 +192,5 @@ async def reject_setup(
             {"tid": trade_id, "payload": json.dumps({"rejected_by": user_id})},
         )
     log.info("setup.rejected", trade_id=trade_id, user_id=user_id)
+    setup_approval_outcome_total.labels(outcome="rejected").inc()
     return {"status": "rejected", "trade_id": trade_id}

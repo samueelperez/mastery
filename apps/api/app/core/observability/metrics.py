@@ -106,6 +106,19 @@ setup_transitions_total = Counter(
     ["from_status", "to_status", "event"],
 )
 
+# Counts how each scout-proposed setup resolves its approval gate.
+# outcome ∈ {approved, rejected, timeout, auto_approved}.
+# - approved / rejected: human pulled the trigger in Telegram or web.
+# - auto_approved: dispatcher bypassed the human step because all gates were
+#   green and sources_agreement met the AUTO_APPROVE_MIN_AGREEMENT threshold.
+# - timeout: scheduler cancelled the setup after APPROVAL_TIMEOUT_SECONDS
+#   without operator response (wiring pending — knob exposed in Settings).
+setup_approval_outcome_total = Counter(
+    "mt_setup_approval_outcome_total",
+    "Setup approval resolutions by outcome.",
+    ["outcome"],
+)
+
 
 # -----------------------------------------------------------------------------
 # Runtime health (alerts/setups/risk runtimes alive)
@@ -114,4 +127,35 @@ setup_transitions_total = Counter(
 runtime_streams_alive = Gauge(
     "mt_runtime_streams_alive",
     "Number of (symbol, timeframe) live ingestion streams currently subscribed.",
+)
+
+
+# -----------------------------------------------------------------------------
+# Cerebro 1 — Liquidation Heatmap Engine
+# -----------------------------------------------------------------------------
+# Labels bounded: symbol ∈ {BTCUSDT,ETHUSDT,SOLUSDT}, timeframe ∈ {1h,4h,1d},
+# provider ∈ {A_derived,B_hyperliquid,D_coinglass}.
+
+liq_snapshots_total = Counter(
+    "mt_liq_snapshots_total",
+    "HeatmapService.get_snapshot returns by (symbol, timeframe, outcome).",
+    ["symbol", "timeframe", "outcome"],  # outcome ∈ {ok, empty, degraded}
+)
+
+liq_snapshot_latency_seconds = Histogram(
+    "mt_liq_snapshot_latency_seconds",
+    "Per-provider get_heatmap wall time inside HeatmapService.",
+    ["provider"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 3.0),
+)
+
+liq_active_addresses = Gauge(
+    "mt_liq_active_addresses",
+    "Total rows in hyperliquid_known_addresses. Drives Provider B coverage.",
+)
+
+liq_provider_errors_total = Counter(
+    "mt_liq_provider_errors_total",
+    "Provider failures inside HeatmapService.",
+    ["provider", "kind"],  # kind ∈ {timeout, exception, stale}
 )

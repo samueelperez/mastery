@@ -115,3 +115,57 @@ async def test_disagree_verdict_kills_provider_rate() -> None:
     assert weights["B_hyperliquid"].agreement_rate == pytest.approx(0.0)
     # Both at floor → 50/50 after normalize.
     assert weights["A_derived"].weight == pytest.approx(0.5, rel=1e-3)
+
+
+async def test_smoke_multi_cell_invariants_hold(monkeypatch) -> None:
+    """M2-readiness smoke (PR-09): the weekly cron must produce weights that
+    obey all calibration invariants when fed a realistic mixed-verdict
+    distribution over multiple (symbol, timeframe) cells.
+
+    Invariants per cell:
+      1. weights sum to 1.0
+      2. every weight is in [0.0, 1.0]
+      3. agreement_rate per provider in [0.0, 1.0]
+      4. n_samples >= MIN_SAMPLES (sub-threshold cells dropped silently)
+    """
+    import random
+
+    rng = random.Random(42)
+    rows: list[dict] = []
+    cells = [
+        ("BTCUSDT", "4h"),
+        ("BTCUSDT", "1h"),
+        ("ETHUSDT", "4h"),
+        ("SOLUSDT", "4h"),
+    ]
+    verdicts_pool = ("agree", "agree", "close", "disagree")  # 50/25/25 mix
+    for symbol, tf in cells:
+        for _ in range(30):
+            v = rng.choice(verdicts_pool)
+            # Provider deltas spread around realistic Q1-2026 distributions
+            # — A is usually tight, B occasionally far on small-cap symbols.
+            delta_a = rng.gauss(0.2, 0.4)
+            delta_b = rng.gauss(0.4, 1.2)
+            rows.append(_log_row(symbol, tf, v, delta_a, delta_b))
+
+    repo = AsyncMock()
+    repo.fetch_agreement_log = AsyncMock(return_value=rows)
+
+    out = await compute_provider_weights(repo)
+
+    # All four cells produced weights.
+    by_cell: dict[tuple[str, str], list] = {}
+    for w in out:
+        by_cell.setdefault((w.symbol, w.timeframe), []).append(w)
+    assert set(by_cell.keys()) == set(cells)
+
+    for _cell, weights in by_cell.items():
+        # invariant 1
+        assert sum(w.weight for w in weights) == pytest.approx(1.0, rel=1e-3)
+        for w in weights:
+            # invariant 2
+            assert 0.0 <= w.weight <= 1.0
+            # invariant 3
+            assert 0.0 <= w.agreement_rate <= 1.0
+            # invariant 4
+            assert w.n_samples >= MIN_SAMPLES

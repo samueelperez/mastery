@@ -20,7 +20,7 @@ F5.5 — Auto-inject `<historic_stats>` preamble:
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import structlog
@@ -75,6 +75,14 @@ async def chat(
             )
 
     log.info("chat.request.start", user_id=user_id)
+    # PR-11 (M1-polish) — cost tracking wiring is deferred for the chat path
+    # because VercelAIAdapter returns a streaming Response before the agent
+    # run finishes; capturing usage requires either a post-stream callback
+    # in pydantic-ai's adapter or replacing the adapter with manual
+    # streaming. The migration `029_llm_usage_log` and the helper
+    # ``app.agent.cost.persist_llm_usage`` are in place ready for that
+    # follow-up; reviewer / post-mortem already persist via per-source
+    # tables and will mirror to ``llm_usage_log`` once the chat path lands.
     response = await VercelAIAdapter.dispatch_request(
         request,
         agent=get_agent(),
@@ -344,7 +352,7 @@ def _format_historic_stats_block(
         scope_note = "(stats globales; régimen no detectable ahora)"
 
     lines = [f"<historic_stats {' '.join(attrs)}>"]
-    lines.append(f"Generated at {datetime.utcnow().isoformat()}Z. {scope_note}")
+    lines.append(f"Generated at {datetime.now(tz=UTC).isoformat()}. {scope_note}")
     if strong:
         lines.append("Factores fuertes (WR_lcb ≥ 50% — favorece confirmar tesis):")
         for f in strong:
