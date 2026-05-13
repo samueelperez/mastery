@@ -68,6 +68,8 @@ export class LiquidationHeatmapPrimitive
   private _requestUpdate: (() => void) | null = null
   private _snapshots: HeatmapSnapshot[] = []
   private _medianVolume = 1
+  private _citedPrices: readonly number[] = []
+  private _citedHighlightColor = "rgba(245, 195, 80, 0.95)"
   private _options: PrimitiveOptions = {
     alphaScale: 1,
     snapshotIntervalSec: 120,
@@ -114,6 +116,15 @@ export class LiquidationHeatmapPrimitive
     this._requestUpdate?.()
   }
 
+  /** Set the price levels (typically `idea.stop_loss` + `idea.targets[].price`)
+   *  that should be visually highlighted because the active TradeIdea cites
+   *  a zone containing them. Pass an empty array to clear. */
+  setCitedPrices(prices: readonly number[], color?: string): void {
+    this._citedPrices = prices
+    if (color) this._citedHighlightColor = color
+    this._requestUpdate?.()
+  }
+
   // ---------------- Internals (used by HeatmapPaneView) ----------------
 
   get snapshots(): readonly HeatmapSnapshot[] {
@@ -128,6 +139,14 @@ export class LiquidationHeatmapPrimitive
     return this._options
   }
 
+  get citedPrices(): readonly number[] {
+    return this._citedPrices
+  }
+
+  get citedHighlightColor(): string {
+    return this._citedHighlightColor
+  }
+
   priceToCoordinate(price: number): MaybeNumber {
     if (!this._series) return null
     const y = this._series.priceToCoordinate(price)
@@ -139,6 +158,46 @@ export class LiquidationHeatmapPrimitive
     const tsSec = Math.floor(new Date(tsIso).getTime() / 1000) as Time
     const x = this._chart.timeScale().timeToCoordinate(tsSec)
     return typeof x === "number" ? x : null
+  }
+
+  /**
+   * Find the zone at media-space coordinates `(x, y)`. Returns `null`
+   * when no zone is hit — used by the React tooltip overlay subscribed
+   * to `chart.subscribeCrosshairMove`. `null` also when the chart isn't
+   * attached yet.
+   */
+  hitTestAt(
+    x: number,
+    y: number,
+  ): { snapshot: HeatmapSnapshot; zone: HeatmapZone } | null {
+    if (!this._chart || !this._series) return null
+    const price = this._series.coordinateToPrice(y)
+    if (price == null) return null
+    const numericPrice = Number(price)
+    const tsSec = this._chart.timeScale().coordinateToTime(x)
+    if (tsSec == null) return null
+    const tsMs = Number(tsSec) * 1000
+    const intervalMs = this._options.snapshotIntervalSec * 1000
+
+    // Find the snapshot whose interval contains `tsMs`. Snapshots are
+    // sorted ascending; we scan from the back because mid-air hovers
+    // are most likely on recent data.
+    for (let i = this._snapshots.length - 1; i >= 0; i--) {
+      const snap = this._snapshots[i]!
+      const snapMs = new Date(snap.ts).getTime()
+      if (tsMs < snapMs - intervalMs / 2) continue
+      if (tsMs > snapMs + intervalMs * 1.5) return null
+      for (const zone of snap.zones) {
+        if (numericPrice >= zone.price_low && numericPrice <= zone.price_high) {
+          return { snapshot: snap, zone }
+        }
+      }
+      // We're inside this snapshot's time band but no zone matches the
+      // price — return null rather than searching neighbouring snapshots
+      // (the hover would be over empty space).
+      return null
+    }
+    return null
   }
 }
 
@@ -169,7 +228,7 @@ class HeatmapPaneRenderer implements IPrimitivePaneRenderer {
   }): void {
     target.useBitmapCoordinateSpace((scope) => {
       const ctx = scope.context
-      const { snapshots, medianVolume, options } = this._src
+      const { snapshots, medianVolume, options, citedPrices, citedHighlightColor } = this._src
       if (snapshots.length === 0) return
 
       const intervalSec = options.snapshotIntervalSec
@@ -204,11 +263,36 @@ class HeatmapPaneRenderer implements IPrimitivePaneRenderer {
           const rgba = volumeToRgba(zone.est_volume_usd, medianVolume)
           ctx.fillStyle = applyAlphaScale(rgba, alphaScale)
           ctx.fillRect(xPx, yTop, wPx, hPx)
+
+          if (
+            citedPrices.length > 0 &&
+            isCitedZone(zone, citedPrices)
+          ) {
+            // Draw a 1.5px luminous border around the cited zone for
+            // every snapshot it appears in — the cloud "remembers" the
+            // levels the agent referenced.
+            const borderWidth = Math.max(1, Math.round(1.5 * Math.min(hx, vy)))
+            ctx.strokeStyle = citedHighlightColor
+            ctx.lineWidth = borderWidth
+            ctx.strokeRect(
+              xPx + borderWidth / 2,
+              yTop + borderWidth / 2,
+              wPx - borderWidth,
+              hPx - borderWidth,
+            )
+          }
         }
       }
       ctx.restore()
     })
   }
+}
+
+function isCitedZone(zone: HeatmapZone, citedPrices: readonly number[]): boolean {
+  for (const price of citedPrices) {
+    if (price >= zone.price_low && price <= zone.price_high) return true
+  }
+  return false
 }
 
 // ---------------- Helpers ----------------

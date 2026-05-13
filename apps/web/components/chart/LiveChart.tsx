@@ -1,15 +1,39 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import type { IChartApi } from "lightweight-charts"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { OverlayPanel } from "@/components/dashboard/OverlayPanel"
 import { useLiquidationHeatmap } from "@/hooks/useLiquidationHeatmap"
 import { useChartOverlays } from "@/lib/store/chart-overlays"
 
+import type { HeatmapSnapshotDTO } from "@/lib/api/liquidation"
+
 import { CandleChart } from "./CandleChart"
 import { ChartLegend } from "./ChartLegend"
+import { HeatmapColorScaleLegend } from "./overlays/HeatmapColorScaleLegend"
+import { HeatmapTooltip } from "./overlays/HeatmapTooltip"
+import type { LiquidationHeatmapPrimitive } from "./overlays/LiquidationHeatmapPrimitive"
 import { useActiveSetupBridge } from "./useActiveSetupBridge"
 import { useLiveCandles } from "./useLiveCandles"
+
+function computeMedianFromBundle(
+  snapshots: HeatmapSnapshotDTO[] | undefined,
+): number | null {
+  if (!snapshots || snapshots.length === 0) return null
+  const vols: number[] = []
+  for (const s of snapshots) {
+    for (const z of s.zones) {
+      if (Number.isFinite(z.est_volume_usd) && z.est_volume_usd > 0) {
+        vols.push(z.est_volume_usd)
+      }
+    }
+  }
+  if (vols.length === 0) return null
+  vols.sort((a, b) => a - b)
+  const mid = Math.floor(vols.length / 2)
+  return vols.length % 2 === 1 ? vols[mid]! : (vols[mid - 1]! + vols[mid]!) / 2
+}
 
 export interface LiveChartProps {
   symbol: string
@@ -25,6 +49,7 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
   )
   const overlays = useChartOverlays((s) => s.bySymbol[symbol] ?? null)
   const minimalMode = useChartOverlays((s) => s.minimalMode)
+  const heatmapEnabled = useChartOverlays((s) => s.heatmapEnabled)
   // Hidrata `tradeIdeas[]` desde DB con todos los setups pending/active del
   // símbolo. Sin esto, recargar la página pierde las zonas aunque
   // `journal_trades` las siga teniendo abiertas.
@@ -61,6 +86,33 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
     [ideas, activeIdeaId],
   )
 
+  // Heatmap tooltip wiring — CandleChart hands us the chart + primitive
+  // refs through `onHeatmapReady` so the tooltip overlay (a sibling
+  // React component) can subscribe to crosshair-move on the same chart
+  // instance the primitive is drawing on.
+  const [heatmapChart, setHeatmapChart] = useState<IChartApi | null>(null)
+  const [heatmapPrimitive, setHeatmapPrimitive] =
+    useState<LiquidationHeatmapPrimitive | null>(null)
+  const handleHeatmapReady = useCallback(
+    (chart: IChartApi | null, primitive: LiquidationHeatmapPrimitive | null) => {
+      setHeatmapChart(chart)
+      setHeatmapPrimitive(primitive)
+    },
+    [],
+  )
+  // Container rect for the tooltip's edge-flipping logic.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null)
+  useEffect(() => {
+    if (!containerRef.current) return
+    const el = containerRef.current
+    const update = () => setContainerRect(el.getBoundingClientRect())
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col gap-2">
       <div className="flex shrink-0 items-center justify-between text-xs text-[var(--fg-2)]">
@@ -91,7 +143,7 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
           </span>
         </span>
       </div>
-      <div className="relative min-h-0 flex-1 w-full">
+      <div ref={containerRef} className="relative min-h-0 flex-1 w-full">
         <CandleChart
           initial={initial}
           live={live}
@@ -99,6 +151,7 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
           activeIdea={activeIdea}
           activeTimeframe={timeframe}
           minimalMode={minimalMode}
+          onHeatmapReady={handleHeatmapReady}
           className={`h-full w-full ${className ?? ""}`}
         />
         <ChartLegend
@@ -109,6 +162,15 @@ export function LiveChart({ symbol, timeframe, className }: LiveChartProps) {
           ideas={ideas}
           activeIdeaId={activeIdea?.id ?? null}
           onSelectIdea={setActiveIdeaId}
+        />
+        <HeatmapTooltip
+          chart={heatmapChart}
+          primitive={heatmapPrimitive}
+          containerRect={containerRect}
+        />
+        <HeatmapColorScaleLegend
+          visible={heatmapEnabled && (overlays?.heatmap?.snapshots.length ?? 0) > 0}
+          medianVolumeUsd={computeMedianFromBundle(overlays?.heatmap?.snapshots)}
         />
       </div>
     </div>

@@ -60,6 +60,14 @@ export interface CandleChartProps {
   /** Si true, oculta el structure (S/R + pivots) del chart. EMAs y
    *  TradeIdea siguen visibles. Toggle global del store. */
   minimalMode?: boolean
+  /** Callback invoked once the heatmap primitive is attached and has
+   *  data, or whenever the chart instance changes. The parent uses
+   *  these refs to wire the hover-tooltip overlay. Both args are null
+   *  when the heatmap is disabled / has no data. */
+  onHeatmapReady?: (
+    chart: IChartApi | null,
+    primitive: LiquidationHeatmapPrimitive | null,
+  ) => void
   className?: string
 }
 
@@ -95,6 +103,7 @@ export function CandleChart({
   activeIdea = null,
   activeTimeframe,
   minimalMode = false,
+  onHeatmapReady,
   className,
 }: CandleChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -665,6 +674,7 @@ export function CandleChart({
         }
         heatmapPrimitiveRef.current = null
       }
+      onHeatmapReady?.(chartRef.current, null)
       return
     }
 
@@ -674,7 +684,30 @@ export function CandleChart({
       heatmapPrimitiveRef.current = primitive
     }
     heatmapPrimitiveRef.current.setData(snapshots)
-  }, [overlays?.heatmap])
+    onHeatmapReady?.(chartRef.current, heatmapPrimitiveRef.current)
+  }, [overlays?.heatmap, onHeatmapReady])
+
+  // -------------------------------------------------------------------------
+  // OVERLAY: cited-zone highlight on the heatmap (HM-PR3)
+  // When a TradeIdea is active, the heatmap zones containing its
+  // stop_loss or any TP price get a luminous amber border so the
+  // operator sees which liquidation cluster the agent referenced.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const primitive = heatmapPrimitiveRef.current
+    const tokens = tokensRef.current
+    if (!primitive) return
+
+    const cited: number[] = []
+    if (activeIdea?.stopLoss != null) cited.push(activeIdea.stopLoss)
+    for (const t of activeIdea?.targets ?? []) {
+      if (t.price != null) cited.push(t.price)
+    }
+    primitive.setCitedPrices(
+      cited,
+      tokens ? withAlpha(tokens.amber, 0.95) : undefined,
+    )
+  }, [activeIdea, overlays?.heatmap])
 
   // -------------------------------------------------------------------------
   // OVERLAY: Markers compilados (tradeIdea direccional + structure pivots)
