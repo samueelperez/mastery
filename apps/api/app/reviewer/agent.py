@@ -27,6 +27,7 @@ from app.agent.tools.perps_data import register_perps_data_tools
 from app.agent.tools.structure import register_structure_tools
 from app.agent.tools.volume_profile import register_volume_profile_tool
 from app.core.config import get_settings
+from app.liquidation.tool import register_liquidation_tool
 from app.reviewer.system_prompt import build_review_system_prompt
 from app.reviewer.validators import register_review_validators
 
@@ -38,9 +39,7 @@ REVIEW_MODEL_ID = "anthropic/claude-sonnet-4.6"
 def build_review_agent() -> Agent[AgentDeps, TradeReview]:
     api_key = get_settings().openrouter_api_key
     if not api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY is not set — review_agent cannot start."
-        )
+        raise RuntimeError("OPENROUTER_API_KEY is not set — review_agent cannot start.")
     model = OpenRouterModel(
         REVIEW_MODEL_ID,
         provider=OpenRouterProvider(api_key=api_key),
@@ -68,6 +67,7 @@ def build_review_agent() -> Agent[AgentDeps, TradeReview]:
     register_confluence_tools(agent)
     register_correlation_tool(agent)
     register_indicator_tools(agent)
+    register_liquidation_tool(agent)
     register_ohlcv_tools(agent)
     register_perps_data_tools(agent)
     register_structure_tools(agent)
