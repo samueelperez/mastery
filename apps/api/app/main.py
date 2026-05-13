@@ -6,6 +6,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.core.db as db_module
+from app.agent.agent import get_agent
 from app.agent.routes import router as chat_router
 from app.alerts.routes import router as alerts_router
 from app.alerts.runtime import AlertsRuntime
@@ -15,6 +17,10 @@ from app.core.broadcasting.pubsub import close_client as close_valkey
 from app.core.config import get_settings
 from app.core.db import dispose_engine, init_engine
 from app.journal.routes import router as journal_router
+from app.liquidation.providers._hyperliquid_bootstrap import (
+    HyperliquidAddressBootstrap,
+)
+from app.liquidation.providers._hyperliquid_client import HyperliquidClient
 from app.market.ohlcv.ingestion_live import LiveIngestion
 from app.market.ohlcv.routes import router as ohlcv_router
 from app.market.ws_routes import router as ws_router
@@ -38,17 +44,33 @@ log = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_engine()
+    # Eager build del agent singleton para evitar race entre callers
+    # concurrentes (chat, scout, reviewer, post_mortem) en cold start
+    # tras un deploy (audit fix 2026-05).
+    get_agent()
     ingestion = LiveIngestion()
     alerts = AlertsRuntime()
     setups = SetupRuntime()
+    # Cerebro 1 — Hyperliquid address universe bootstrap (Day 3).
+    # Owns its own client + WS subscription; tasks run alongside ingestion.
+    settings = get_settings()
+    hl_client = HyperliquidClient()
+    hl_bootstrap = HyperliquidAddressBootstrap(
+        session_factory=db_module._sessionmaker,  # type: ignore[arg-type]
+        client=hl_client,
+        watch_symbols=list(settings.watch_symbol_list),
+    )
     await ingestion.start()
     await alerts.start()
     await setups.start()
+    await hl_bootstrap.start()
     log.info("api.start")
     try:
         yield
     finally:
         log.info("api.stop")
+        await hl_bootstrap.stop()
+        await hl_client.close()
         await setups.stop()
         await alerts.stop()
         await ingestion.stop()
