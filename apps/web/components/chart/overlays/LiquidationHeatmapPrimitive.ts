@@ -25,6 +25,7 @@ import type {
   ISeriesPrimitive,
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
+  Logical,
   SeriesAttachedParameter,
   PrimitivePaneViewZOrder,
   Time,
@@ -155,9 +156,32 @@ export class LiquidationHeatmapPrimitive
 
   timeToCoordinate(tsIso: string): MaybeNumber {
     if (!this._chart) return null
-    const tsSec = Math.floor(new Date(tsIso).getTime() / 1000) as Time
-    const x = this._chart.timeScale().timeToCoordinate(tsSec)
-    return typeof x === "number" ? x : null
+    const tsSec = Math.floor(new Date(tsIso).getTime() / 1000)
+    const ts = this._chart.timeScale()
+    const visibleRange = ts.getVisibleRange()
+    const visibleLogical = ts.getVisibleLogicalRange()
+    if (!visibleRange || !visibleLogical) return null
+    const fromSec = Number(visibleRange.from)
+    const toSec = Number(visibleRange.to)
+    if (!Number.isFinite(fromSec) || !Number.isFinite(toSec) || toSec <= fromSec) {
+      return null
+    }
+    // Skip snapshots whose time falls outside the visible window — they
+    // would otherwise clamp to the canvas edge and pile up as a vertical
+    // line. Caller treats null as "off screen, don't draw".
+    // Skip timestamps outside the visible window — otherwise the
+    // out-of-range result would clamp to the canvas edge and pile up
+    // as a vertical line at x=0. Caller treats null as "off-screen,
+    // don't draw".
+    if (tsSec < fromSec || tsSec > toSec) return null
+    const logicalSpan = visibleLogical.to - visibleLogical.from
+    const timeSpan = toSec - fromSec
+    if (timeSpan <= 0 || logicalSpan <= 0) return null
+    const fractional =
+      visibleLogical.from + ((tsSec - fromSec) / timeSpan) * logicalSpan
+    const x = ts.logicalToCoordinate(fractional as Logical)
+    if (typeof x !== "number" || !Number.isFinite(x)) return null
+    return x
   }
 
   /**
