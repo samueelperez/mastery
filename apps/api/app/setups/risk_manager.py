@@ -231,8 +231,8 @@ async def apply_risk_action_to_db(
                     risk_state = COALESCE(risk_state, '{}'::jsonb)
                                 || jsonb_build_object(
                                        'breakeven_moved', true,
-                                       'breakeven_moved_at', :ts_iso,
-                                       'breakeven_unrealized_r', :ur
+                                       'breakeven_moved_at', CAST(:ts_iso AS text),
+                                       'breakeven_unrealized_r', CAST(:ur AS numeric)
                                    ),
                     updated_at = now()
                 WHERE id = CAST(:tid AS uuid)
@@ -267,10 +267,10 @@ async def apply_risk_action_to_db(
                     risk_state = COALESCE(risk_state, '{}'::jsonb)
                                 || jsonb_build_object(
                                        'trailing_active', true,
-                                       'trailing_sl', :sl,
-                                       'trailing_updated_at', :ts_iso,
-                                       'trailing_atr', :atr,
-                                       'trailing_offset', :off
+                                       'trailing_sl', CAST(:sl AS numeric),
+                                       'trailing_updated_at', CAST(:ts_iso AS text),
+                                       'trailing_atr', CAST(:atr AS numeric),
+                                       'trailing_offset', CAST(:off AS numeric)
                                    ),
                     updated_at = now()
                 WHERE id = CAST(:tid AS uuid)
@@ -312,8 +312,8 @@ async def apply_risk_action_to_db(
                     risk_state = COALESCE(risk_state, '{}'::jsonb)
                                 || jsonb_build_object(
                                        'time_stopped', true,
-                                       'time_stopped_at', :ts_iso,
-                                       'time_stop_reason', :reason
+                                       'time_stopped_at', CAST(:ts_iso AS text),
+                                       'time_stop_reason', CAST(:reason AS text)
                                    ),
                     updated_at = now()
                 WHERE id = CAST(:tid AS uuid)
