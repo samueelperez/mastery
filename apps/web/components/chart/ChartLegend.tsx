@@ -105,34 +105,7 @@ export function ChartLegend({
     }
   })()
 
-  const heatmapRow = ((): LegendRow | null => {
-    const hm = overlays?.heatmap
-    if (!hm || hm.snapshots.length === 0) return null
-    const lastTs = hm.asOf ?? hm.snapshots[hm.snapshots.length - 1]!.ts
-    const ageMin = Math.max(
-      0,
-      Math.floor((Date.now() - new Date(lastTs).getTime()) / 60_000),
-    )
-    const ageLabel =
-      ageMin < 2 ? "live" : ageMin < 60 ? `${ageMin}m ago` : `${Math.floor(ageMin / 60)}h ago`
-    const zoneCount = hm.snapshots.reduce((acc, s) => acc + s.zones.length, 0)
-    const stale = ageMin >= 5
-    return {
-      key: "heatmap",
-      dotClass: stale
-        ? "bg-[var(--fg-3)]"
-        : "bg-gradient-to-r from-[rgb(16,96,168)] via-[rgb(230,184,40)] to-[rgb(226,50,50)]",
-      label: stale ? `Liq · stale ${ageLabel}` : "Liquidation",
-      value: `${ageLabel} · ${zoneCount} zones`,
-    }
-  })()
-
-  if (
-    indicatorRows.length === 0 &&
-    !tradeIdea &&
-    !structureRow &&
-    !heatmapRow
-  ) {
+  if (indicatorRows.length === 0 && !tradeIdea && !structureRow) {
     return null
   }
 
@@ -171,7 +144,6 @@ export function ChartLegend({
         />
       )}
       {structureRow && <Row row={structureRow} />}
-      {heatmapRow && <Row row={heatmapRow} />}
     </div>
   )
 }

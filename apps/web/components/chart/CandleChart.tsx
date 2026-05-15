@@ -25,7 +25,6 @@ import type {
 } from "@/lib/store/chart-overlays"
 
 import { readChartTokens, withAlpha, type ChartTokens } from "./overlays/colors"
-import { LiquidationHeatmapPrimitive } from "./overlays/LiquidationHeatmapPrimitive"
 import {
   computeBollinger,
   computeEma,
@@ -60,14 +59,6 @@ export interface CandleChartProps {
   /** Si true, oculta el structure (S/R + pivots) del chart. EMAs y
    *  TradeIdea siguen visibles. Toggle global del store. */
   minimalMode?: boolean
-  /** Callback invoked once the heatmap primitive is attached and has
-   *  data, or whenever the chart instance changes. The parent uses
-   *  these refs to wire the hover-tooltip overlay. Both args are null
-   *  when the heatmap is disabled / has no data. */
-  onHeatmapReady?: (
-    chart: IChartApi | null,
-    primitive: LiquidationHeatmapPrimitive | null,
-  ) => void
   className?: string
 }
 
@@ -103,7 +94,6 @@ export function CandleChart({
   activeIdea = null,
   activeTimeframe,
   minimalMode = false,
-  onHeatmapReady,
   className,
 }: CandleChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -138,10 +128,6 @@ export function CandleChart({
   const markersPluginRef = useRef<
     ISeriesMarkersPluginApi<Time> | null
   >(null)
-  // Heatmap primitive (HM-PR2). Attached to the candle series via
-  // `series.attachPrimitive()`; `chart.remove()` in the mount cleanup
-  // disposes it automatically, but we also null the ref there.
-  const heatmapPrimitiveRef = useRef<LiquidationHeatmapPrimitive | null>(null)
 
   // Mount + unmount: create / destroy the chart instance.
   useEffect(() => {
@@ -217,7 +203,6 @@ export function CandleChart({
       overlaySeriesMap.clear()
       tradeIdeaRef.current = null
       markersPluginRef.current = null
-      heatmapPrimitiveRef.current = null
       seededRef.current = false
     }
   }, [])
@@ -649,65 +634,6 @@ export function CandleChart({
     }
     structureSeriesRef.current = next
   }, [overlays?.structure, initial, minimalMode])
-
-  // -------------------------------------------------------------------------
-  // OVERLAY: Liquidation heatmap 2D (Cerebro 1 visual — HM-PR2)
-  // Pane primitive attached to the candle series. zOrder='bottom' keeps
-  // the cloud below candles + EMAs + trade idea. When the store says no
-  // heatmap data (toggle off, no snapshots yet), the primitive is
-  // detached entirely — no idle render cost.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const candleSeries = candleSeriesRef.current
-    if (!candleSeries) return
-
-    const heatmap = overlays?.heatmap ?? null
-    const snapshots = heatmap?.snapshots ?? []
-
-    if (snapshots.length === 0) {
-      const existing = heatmapPrimitiveRef.current
-      if (existing) {
-        try {
-          candleSeries.detachPrimitive(existing)
-        } catch {
-          // chart already removed, ignore
-        }
-        heatmapPrimitiveRef.current = null
-      }
-      onHeatmapReady?.(chartRef.current, null)
-      return
-    }
-
-    if (!heatmapPrimitiveRef.current) {
-      const primitive = new LiquidationHeatmapPrimitive()
-      candleSeries.attachPrimitive(primitive)
-      heatmapPrimitiveRef.current = primitive
-    }
-    heatmapPrimitiveRef.current.setData(snapshots)
-    onHeatmapReady?.(chartRef.current, heatmapPrimitiveRef.current)
-  }, [overlays?.heatmap, onHeatmapReady])
-
-  // -------------------------------------------------------------------------
-  // OVERLAY: cited-zone highlight on the heatmap (HM-PR3)
-  // When a TradeIdea is active, the heatmap zones containing its
-  // stop_loss or any TP price get a luminous amber border so the
-  // operator sees which liquidation cluster the agent referenced.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const primitive = heatmapPrimitiveRef.current
-    const tokens = tokensRef.current
-    if (!primitive) return
-
-    const cited: number[] = []
-    if (activeIdea?.stopLoss != null) cited.push(activeIdea.stopLoss)
-    for (const t of activeIdea?.targets ?? []) {
-      if (t.price != null) cited.push(t.price)
-    }
-    primitive.setCitedPrices(
-      cited,
-      tokens ? withAlpha(tokens.amber, 0.95) : undefined,
-    )
-  }, [activeIdea, overlays?.heatmap])
 
   // -------------------------------------------------------------------------
   // OVERLAY: Markers compilados (tradeIdea direccional + structure pivots)
