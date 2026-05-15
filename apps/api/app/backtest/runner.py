@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.tools._time import floor_to_timeframe
+from app.core.time import floor_to_timeframe
 from app.backtest.metrics import (
     StrategyMetrics,
     annualization_factor_for,
@@ -239,10 +239,16 @@ async def run_backtest(
     session: AsyncSession,
     *,
     spec: BacktestSpec,
+    user_id: str,
     exchange: str = "binance_usdm",
     persist: bool = True,
 ) -> BacktestResult:
-    """Fetch OHLCV, run the strategy, simulate fills, persist + return result."""
+    """Fetch OHLCV, run the strategy, simulate fills, persist + return result.
+
+    `user_id` scopes the `n_runs` counter and `best_dsr` aggregate per-user
+    (multi-tenant fix audit 2026-05). Without this, user A's sweeps inflate
+    DSR deflation for user B's metrics.
+    """
     strat = get_strategy(spec.strategy_id)
 
     until = spec.until or floor_to_timeframe(datetime.now(tz=UTC), spec.timeframe)
@@ -288,12 +294,15 @@ async def run_backtest(
     # agregado se infla porque cada run individual asume n_trials=1.
     # Auditoría 2026-05 #B6.
     if persist:
+        # FOR UPDATE prevents the SELECT/UPSERT race that off-by-ones DSR
+        # deflation under concurrent backtests. Audit 2026-05 (backtest C3).
         n_trials_row = await session.execute(
             text(
                 "SELECT COALESCE(n_runs, 0) FROM strategy_metrics "
-                "WHERE strategy_id = :sid"
+                "WHERE strategy_id = :sid AND user_id = :uid "
+                "FOR UPDATE"
             ),
-            {"sid": spec.strategy_id},
+            {"sid": spec.strategy_id, "uid": user_id},
         )
         prev_runs = n_trials_row.scalar() or 0
         n_trials_for_dsr = prev_runs + 1
@@ -312,11 +321,11 @@ async def run_backtest(
             text(
                 """
                 INSERT INTO backtest_runs (
-                    id, strategy_id, params, symbol, timeframe,
+                    id, user_id, strategy_id, params, symbol, timeframe,
                     range_start, range_end, fees_bps, slippage_atr, seed,
                     status, metrics, equity_curve, trades, finished_at
                 ) VALUES (
-                    CAST(:id AS uuid), :sid, CAST(:params AS jsonb), :sym, :tf,
+                    CAST(:id AS uuid), :uid, :sid, CAST(:params AS jsonb), :sym, :tf,
                     :rs, :re, :fees, :slip, :seed,
                     'done', CAST(:metrics AS jsonb), CAST(:equity AS jsonb),
                     CAST(:trades AS jsonb), now()
@@ -325,6 +334,7 @@ async def run_backtest(
             ),
             {
                 "id": run_id,
+                "uid": user_id,
                 "sid": spec.strategy_id,
                 "params": json.dumps(params),
                 "sym": spec.symbol.upper(),
@@ -343,20 +353,20 @@ async def run_backtest(
                 ),
             },
         )
-        # Update strategy_metrics aggregate
+        # Update strategy_metrics aggregate (per-user)
         await session.execute(
             text(
                 """
-                INSERT INTO strategy_metrics (strategy_id, last_run_id, n_runs, best_dsr, best_pbo)
-                VALUES (:sid, CAST(:rid AS uuid), 1, :dsr, NULL)
-                ON CONFLICT (strategy_id) DO UPDATE SET
+                INSERT INTO strategy_metrics (strategy_id, user_id, last_run_id, n_runs, best_dsr, best_pbo)
+                VALUES (:sid, :uid, CAST(:rid AS uuid), 1, :dsr, NULL)
+                ON CONFLICT (strategy_id, user_id) DO UPDATE SET
                   last_run_id = EXCLUDED.last_run_id,
                   n_runs = strategy_metrics.n_runs + 1,
                   best_dsr = GREATEST(COALESCE(strategy_metrics.best_dsr, -1e9), EXCLUDED.best_dsr),
                   last_updated = now()
                 """
             ),
-            {"sid": spec.strategy_id, "rid": run_id, "dsr": metrics.deflated_sharpe},
+            {"sid": spec.strategy_id, "uid": user_id, "rid": run_id, "dsr": metrics.deflated_sharpe},
         )
 
     log.info(

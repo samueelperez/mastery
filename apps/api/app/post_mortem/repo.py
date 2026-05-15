@@ -37,7 +37,6 @@ async def insert_post_mortem(
     confidence_calibration: str,
     factor_verdicts: dict[str, Any],
     lesson_es: str,
-    summary_es: str,
     counterfactual_es: str | None,
     entry_vs_exit_delta: dict[str, Any] | None,
     citations: list[dict[str, Any]],
@@ -64,13 +63,13 @@ async def insert_post_mortem(
                 INSERT INTO setup_post_mortems (
                     trade_id, user_id, outcome, r_multiple, exit_reason,
                     verdict, confidence_calibration, factor_verdicts,
-                    lesson_es, summary_es, counterfactual_es,
+                    lesson_es, counterfactual_es,
                     entry_vs_exit_delta, citations,
                     model_id, usage_tokens, cost_usd, prompt_version
                 ) VALUES (
                     CAST(:tid AS uuid), :uid, :outcome, :r, :exit_reason,
                     :verdict, :cal, CAST(:fv AS jsonb),
-                    :lesson, :summary, :counterfactual,
+                    :lesson, :counterfactual,
                     CAST(:delta AS jsonb), CAST(:citations AS jsonb),
                     :model, CAST(:usage AS jsonb), :cost, :pv
                 )
@@ -88,7 +87,6 @@ async def insert_post_mortem(
                 "cal": confidence_calibration,
                 "fv": json.dumps(factor_verdicts),
                 "lesson": lesson_es,
-                "summary": summary_es,
                 "counterfactual": counterfactual_es,
                 "delta": (
                     json.dumps(entry_vs_exit_delta) if entry_vs_exit_delta is not None else None
@@ -149,7 +147,7 @@ async def get_post_mortem_by_trade_id(
                 SELECT id::text, trade_id::text, user_id, outcome, r_multiple,
                        exit_reason, verdict, confidence_calibration,
                        factor_verdicts,
-                       lesson_es, summary_es, counterfactual_es,
+                       lesson_es, counterfactual_es,
                        entry_vs_exit_delta, citations,
                        model_id, usage_tokens, cost_usd, prompt_version,
                        created_at
@@ -182,7 +180,7 @@ async def list_post_mortems(
         SELECT id::text, trade_id::text, user_id, outcome, r_multiple,
                exit_reason, verdict, confidence_calibration,
                factor_verdicts,
-               lesson_es, summary_es, counterfactual_es,
+               lesson_es, counterfactual_es,
                entry_vs_exit_delta, citations,
                model_id, usage_tokens, cost_usd, prompt_version, created_at
         FROM setup_post_mortems

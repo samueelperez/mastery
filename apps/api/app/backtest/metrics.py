@@ -18,6 +18,7 @@ from typing import Any
 
 import numpy as np
 from pydantic import BaseModel, Field
+from scipy.stats import norm
 
 # -----------------------------------------------------------------------------
 # Pydantic schema (serialized into backtest_runs.metrics jsonb)
@@ -229,17 +230,26 @@ def deflated_sharpe(
     """DSR adjusts the PSR benchmark for the # of strategy variations tried.
 
     From Bailey & López de Prado (2014): DSR = PSR(SR > E[max SR over N trials]).
-    Approximate the expected max with the standard extreme-value formula:
-        E[max] ≈ sqrt(2 * ln(n_trials)) - (1 - γ) / sqrt(2 * ln(n_trials))
-    where γ ≈ 0.5772 is the Euler-Mascheroni constant.
+    Closed-form benchmark del paper §3:
+
+        E[max SR] ≈ (1-γ)·Φ⁻¹(1 - 1/N) + γ·Φ⁻¹(1 - 1/(N·e))
+
+    donde γ ≈ 0.5772 es la constante de Euler-Mascheroni y Φ⁻¹ es la
+    cuantil inversa de la normal estándar. Audit fix 2026-05: la versión
+    Gumbel/EVT que vivía aquí era +0.30–0.37 más alta para N ∈ [2, 1000]
+    → rechazaba estrategias buenas (falsos overfit). La closed-form de
+    Bailey es la fórmula del paper y la convención de la literatura.
     """
     if n_trials < 1:
         return probabilistic_sharpe(sharpe, n, skew=skew, kurt_excess=kurt_excess)
     if n_trials == 1:
         sr_benchmark = 0.0
     else:
-        ln_n = math.log(max(n_trials, 2))
-        sr_benchmark = math.sqrt(2 * ln_n) - (1 - 0.5772156649) / math.sqrt(2 * ln_n)
+        gamma = 0.5772156649
+        sr_benchmark = float(
+            (1.0 - gamma) * norm.ppf(1.0 - 1.0 / n_trials)
+            + gamma * norm.ppf(1.0 - 1.0 / (n_trials * math.e))
+        )
     return probabilistic_sharpe(sharpe, n, skew=skew, kurt_excess=kurt_excess, sr_benchmark=sr_benchmark)
 
 

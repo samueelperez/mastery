@@ -866,7 +866,25 @@ async def transition_to_invalidated(
     `cancelled` event so the journal can attribute auto-cancels separately).
     Idempotent via the status='pending' guard — duplicate fires no-op.
     Returns True if the row was modified.
+
+    Audit fix 2026-05: `SELECT ... FOR UPDATE` lockea la fila antes del
+    UPDATE, simétrico al patrón de `_evaluate_setup` en entry_hit. Sin
+    esto, dos paths concurrentes (sweeper expiry + condition match) pueden
+    ambos hacer UPDATE — Postgres serializa el segundo, que ve status≠'pending'
+    y rebota — pero el SELECT FOR UPDATE hace el contrato explícito y
+    previene regresiones futuras si alguien añade otra ruta.
     """
+    locked_status = (
+        await session.execute(
+            text(
+                "SELECT status FROM journal_trades "
+                "WHERE id = CAST(:tid AS uuid) FOR UPDATE"
+            ),
+            {"tid": trade_id},
+        )
+    ).scalar_one_or_none()
+    if locked_status != "pending":
+        return False
     result = await session.execute(
         text(
             """

@@ -18,10 +18,13 @@ def init_engine() -> AsyncEngine:
     global _engine, _sessionmaker
     if _engine is None:
         settings = get_settings()
+        # Audit fix 2026-05: pool params → Settings (DB_POOL_*). `pool_recycle`
+        # evita stale connections cuando Neon/Supabase cierran idle.
         _engine = create_async_engine(
             settings.database_url,
-            pool_size=10,
-            max_overflow=5,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_pool_max_overflow,
+            pool_recycle=settings.db_pool_recycle_s,
             pool_pre_ping=True,
             echo=False,
         )

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth.session import require_user_id
 from app.core.db import session_dependency
 
 router = APIRouter()
@@ -65,6 +66,7 @@ class BacktestRunDetail(BacktestRunSummary):
 @router.get("/backtests", response_model=list[BacktestRunSummary], tags=["research"])
 async def list_backtests(
     session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
     strategy_id: Annotated[str | None, Query()] = None,
     symbol: Annotated[str | None, Query()] = None,
     timeframe: Annotated[str | None, Query()] = None,
@@ -79,7 +81,8 @@ async def list_backtests(
                        range_start, range_end, fees_bps, slippage_atr,
                        status, created_at, finished_at, metrics
                 FROM backtest_runs
-                WHERE (CAST(:sid AS text) IS NULL OR strategy_id = :sid)
+                WHERE user_id = :uid
+                  AND (CAST(:sid AS text) IS NULL OR strategy_id = :sid)
                   AND (CAST(:sym AS text) IS NULL OR symbol = :sym)
                   AND (CAST(:tf  AS text) IS NULL OR timeframe = :tf)
                 ORDER BY created_at DESC
@@ -87,6 +90,7 @@ async def list_backtests(
                 """
             ),
             {
+                "uid": user_id,
                 "sid": strategy_id,
                 "sym": symbol.upper() if symbol else None,
                 "tf": timeframe,
@@ -102,6 +106,7 @@ async def list_backtests(
 async def get_backtest(
     run_id: str,
     session: Annotated[AsyncSession, Depends(session_dependency)],
+    user_id: Annotated[str, Depends(require_user_id)],
 ) -> BacktestRunDetail:
     row = (
         await session.execute(
@@ -112,10 +117,10 @@ async def get_backtest(
                        status, created_at, finished_at, metrics,
                        equity_curve, trades
                 FROM backtest_runs
-                WHERE id = CAST(:rid AS uuid)
+                WHERE id = CAST(:rid AS uuid) AND user_id = :uid
                 """
             ),
-            {"rid": run_id},
+            {"rid": run_id, "uid": user_id},
         )
     ).mappings().one_or_none()
     if not row:

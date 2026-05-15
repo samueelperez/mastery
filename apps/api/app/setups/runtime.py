@@ -47,6 +47,14 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.market.ohlcv.ingestion_live import get_watch_list
+from app.paper_trading import (
+    FillSimulationInput,
+    close_position as _paper_close_position,
+    get_balance as _paper_get_balance,
+    init_balance as _paper_init_balance,
+    open_position as _paper_open_position,
+    simulate_fill,
+)
 from app.post_mortem.dispatcher import maybe_run_post_mortem
 from app.reviewer.dispatcher import maybe_run_review
 from app.reviewer.repo import list_active_setups_due_for_time_review
@@ -132,6 +140,140 @@ def _fire_post_mortem(
     )
     _POST_MORTEM_TASKS.add(task)
     task.add_done_callback(_POST_MORTEM_TASKS.discard)
+
+
+# ---------------------------------------------------------------------------
+# Paper trading wire (F4) — feature-flagged. Errores no rompen el lifecycle:
+# si paper falla, el setup transition sigue ocurriendo y se loguea.
+# ---------------------------------------------------------------------------
+
+
+from decimal import Decimal
+
+
+def _paper_enabled() -> bool:
+    return bool(get_settings().paper_trading_enabled)
+
+
+async def _maybe_paper_open(
+    *,
+    setup: OpenSetupRow,
+    high: float,
+    low: float,
+) -> None:
+    """En entry_hit: simula el fill con slippage, abre paper position.
+    Sizing F4.0: 1% del balance vigente. F4.1 reemplazará por sizing
+    determinístico que lea position_size_pct desde features jsonb."""
+    if not _paper_enabled():
+        return
+    try:
+        settings = get_settings()
+        size_pct = 0.01  # F4.0 transitional — 1% fixed; F4.1 cableará features.position_size_pct
+        async with session_scope() as session:
+            # Lazy init del balance del user con el equity inicial.
+            await _paper_init_balance(
+                session,
+                user_id=setup.user_id,
+                initial_usd=Decimal(str(settings.paper_initial_equity_usd)),
+            )
+            balance = await _paper_get_balance(session, setup.user_id)
+            if balance is None or balance <= 0:
+                log.warning(
+                    "paper.no_balance",
+                    setup_id=setup.id,
+                    user_id=setup.user_id,
+                )
+                return
+
+            fill = simulate_fill(
+                FillSimulationInput(
+                    side=setup.side,  # type: ignore[arg-type]
+                    kind="entry",
+                    intended_px=setup.entry_px,
+                    spread_pct=settings.paper_default_spread_pct,
+                    atr_pct=0.0,  # F4.1 cableará ATR real desde panel
+                    taker_fee_bps=settings.paper_taker_fee_bps,
+                )
+            )
+            notional_usd = balance * Decimal(str(size_pct))
+            qty_coin = notional_usd / Decimal(str(fill.filled_px))
+            if qty_coin <= 0:
+                return
+            await _paper_open_position(
+                session,
+                trade_id=setup.id,
+                user_id=setup.user_id,
+                symbol=setup.symbol,
+                side=setup.side,
+                qty_coin=qty_coin,
+                intended_entry_px=Decimal(str(setup.entry_px)),
+                filled_entry_px=Decimal(str(fill.filled_px)),
+                taker_fee_bps=settings.paper_taker_fee_bps,
+            )
+            log.info(
+                "paper.opened",
+                setup_id=setup.id,
+                user_id=setup.user_id,
+                qty_coin=str(qty_coin),
+                filled_px=fill.filled_px,
+                slippage_bps=fill.slippage_bps,
+            )
+    except Exception as exc:
+        log.warning(
+            "paper.open_failed",
+            setup_id=setup.id,
+            error=type(exc).__name__,
+            message=str(exc)[:200],
+        )
+
+
+async def _maybe_paper_close(
+    *,
+    setup: OpenSetupRow,
+    intended_exit_px: float,
+    closed_reason: str,
+) -> None:
+    """En sl_hit/tp_hit final/time_stop: aplica slippage al exit y cierra
+    la paper position. Idempotent — si no había open position, no-op."""
+    if not _paper_enabled():
+        return
+    try:
+        settings = get_settings()
+        exit_kind_side = "short" if setup.side == "long" else "long"  # cross spread
+        fill = simulate_fill(
+            FillSimulationInput(
+                side=exit_kind_side,  # type: ignore[arg-type]
+                kind="exit",
+                intended_px=intended_exit_px,
+                spread_pct=settings.paper_default_spread_pct,
+                atr_pct=0.0,
+                taker_fee_bps=settings.paper_taker_fee_bps,
+            )
+        )
+        async with session_scope() as session:
+            closed = await _paper_close_position(
+                session,
+                trade_id=setup.id,
+                intended_exit_px=Decimal(str(intended_exit_px)),
+                filled_exit_px=Decimal(str(fill.filled_px)),
+                taker_fee_bps=settings.paper_taker_fee_bps,
+                closed_reason=closed_reason,
+            )
+        if closed is not None:
+            log.info(
+                "paper.closed",
+                setup_id=setup.id,
+                user_id=setup.user_id,
+                realized_pnl_usd=str(closed.realized_pnl_usd),
+                closed_reason=closed_reason,
+            )
+    except Exception as exc:
+        log.warning(
+            "paper.close_failed",
+            setup_id=setup.id,
+            error=type(exc).__name__,
+            message=str(exc)[:200],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +605,23 @@ async def _evaluate_setup(
                 candle_ts=candle_ts,
                 payload={"entry": setup.entry_px, "high": high, "low": low},
             )
+            # Persist el SL original al activar — para que un SL hit posterior
+            # tras un BE move calcule r_multiple correctamente (0R, no -1R).
+            # Audit fix 2026-05 (setups Important #7).
+            if setup.stop_loss_px is not None:
+                await session.execute(
+                    text(
+                        """
+                        UPDATE journal_trades
+                        SET risk_state = COALESCE(risk_state, '{}'::jsonb)
+                                         || jsonb_build_object(
+                                             'entry_sl_px', CAST(:sl AS numeric)
+                                           )
+                        WHERE id = CAST(:tid AS uuid)
+                        """
+                    ),
+                    {"tid": setup.id, "sl": setup.stop_loss_px},
+                )
         log.info(
             "setup.entry_hit",
             setup_id=setup.id,
@@ -470,6 +629,9 @@ async def _evaluate_setup(
             timeframe=setup.timeframe,
             side=setup.side,
         )
+        # F4: abrir paper position (feature-flagged) ANTES del fire-and-forget
+        # del review, para que el preamble del review vea la posición ya abierta.
+        await _maybe_paper_open(setup=setup, high=high, low=low)
         # Dispara review post-entry. Pasamos el `entry_px` como current_price
         # (la review evalúa el estado AL momento del entry; el precio actual
         # del market puede divergir un poco pero el agente leerá fresh data
@@ -499,6 +661,18 @@ async def _evaluate_setup(
         # The assert helps mypy re-narrow after the model_copy round-trip.
         assert setup.stop_loss_px is not None
         if _sl_hit(setup.side, setup.stop_loss_px, high, low):
+            # R-multiple post-BE: si el SL se movió a entry (BE) o más
+            # arriba (trailing), el exit en SL ya NO es -1R. Re-derivamos
+            # usando el SL original guardado en risk_state.entry_sl_px al
+            # activar el setup (audit fix 2026-05).
+            entry_sl_px = (setup.risk_state or {}).get("entry_sl_px")
+            if isinstance(entry_sl_px, int | float) and entry_sl_px > 0:
+                r_at_sl = _r_multiple(
+                    setup.side, setup.entry_px, float(entry_sl_px), setup.stop_loss_px
+                )
+            else:
+                # Fallback (filas pre-fix): mantener convención -1R.
+                r_at_sl = -1.0
             async with session_scope() as session:
                 await transition_status(
                     session,
@@ -506,15 +680,26 @@ async def _evaluate_setup(
                     new_status="closed",
                     event="sl_hit",
                     candle_ts=candle_ts,
-                    payload={"sl": setup.stop_loss_px, "exit_px": setup.stop_loss_px},
+                    payload={
+                        "sl": setup.stop_loss_px,
+                        "exit_px": setup.stop_loss_px,
+                        "entry_sl_px": entry_sl_px,
+                        "r_multiple": r_at_sl,
+                    },
                     exit_px=setup.stop_loss_px,
-                    r_multiple=-1.0,
+                    r_multiple=r_at_sl,
                 )
             log.info(
                 "setup.sl_hit",
                 setup_id=setup.id,
                 symbol=setup.symbol,
                 timeframe=setup.timeframe,
+            )
+            # F4: cerrar paper position (feature-flagged).
+            await _maybe_paper_close(
+                setup=setup,
+                intended_exit_px=setup.stop_loss_px,
+                closed_reason="sl_hit",
             )
             # F5.5: dispara el post-mortem agent (fire-and-forget). El
             # dispatcher es idempotente (UNIQUE trade_id) y respeta el flag
@@ -575,6 +760,12 @@ async def _evaluate_setup(
                     setup_id=setup.id,
                     symbol=setup.symbol,
                     r_multiple=round(r, 3),
+                )
+                # F4: cerrar paper position (feature-flagged).
+                await _maybe_paper_close(
+                    setup=setup,
+                    intended_exit_px=last_price,
+                    closed_reason="tp_hit",
                 )
                 # F5.5: dispara el post-mortem agent (fire-and-forget).
                 _fire_post_mortem(
@@ -790,22 +981,22 @@ async def _evaluate_price_review_triggers(
                 >= 0.005
             )
             if threshold_crossed and far_enough_from_last:
-                    direction_favorable = (
-                        (setup.side == "long" and close > setup.entry_px)
-                        or (setup.side == "short" and close < setup.entry_px)
-                    )
-                    _fire_review(
-                        setup=setup,
-                        trigger_kind="price_move",
-                        trigger_payload={
-                            "close": close,
-                            "pct_from_entry": round(pct_from_entry, 3),
-                            "direction_favorable": direction_favorable,
-                        },
-                        current_price=close,
-                        candle_ts=candle_ts,
-                    )
-                    continue  # un solo trigger por setup por tick
+                direction_favorable = (
+                    (setup.side == "long" and close > setup.entry_px)
+                    or (setup.side == "short" and close < setup.entry_px)
+                )
+                _fire_review(
+                    setup=setup,
+                    trigger_kind="price_move",
+                    trigger_payload={
+                        "close": close,
+                        "pct_from_entry": round(pct_from_entry, 3),
+                        "direction_favorable": direction_favorable,
+                    },
+                    current_price=close,
+                    candle_ts=candle_ts,
+                )
+                continue  # un solo trigger por setup por tick
 
         # --- approaching_sl ----------------------------------------------
         if setup.stop_loss_px is not None and setup.entry_px:
@@ -835,12 +1026,10 @@ async def _fetch_review_meta(trade_ids: list[str]) -> dict[str, dict[str, Any]]:
     """Batch fetch de last_review_price/last_review_at para guards."""
     if not trade_ids:
         return {}
-    from sqlalchemy import text as _text
-
     async with session_scope() as session:
         rows = (
             await session.execute(
-                _text(
+                text(
                     """
                     SELECT id::text AS id, last_review_at, last_review_price
                     FROM journal_trades
@@ -976,7 +1165,7 @@ async def _market_loop(symbol: str, timeframe: str) -> None:
                         candle_ts = (
                             datetime.fromisoformat(ts_raw)
                             if isinstance(ts_raw, str)
-                            else datetime.utcnow()
+                            else datetime.now(tz=UTC)
                         )
                         high = float(data.get("h", 0.0))
                         low = float(data.get("l", 0.0))

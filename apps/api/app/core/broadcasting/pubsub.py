@@ -7,6 +7,8 @@ named `mkt:{exchange}:{symbol_lc}:k:{timeframe}` so the routing is trivial.
 
 from __future__ import annotations
 
+import asyncio
+import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -77,12 +79,72 @@ async def subscribe(channel: str) -> AsyncIterator[redis.client.PubSub]:
 
 
 async def ping() -> bool:
-    """Returns True if Valkey responds to PING; False otherwise. Best-effort."""
+    """Returns True if Valkey responds to PING; False otherwise. Best-effort.
+
+    Log explícito en fallo (audit fix 2026-05: antes traga la excepción y
+    `/health` reportaba `valkey: fail` sin pista de la causa)."""
     try:
         client = get_client()
         # `client.ping()` is async on redis.asyncio; mypy's stubs flag the
         # union return type loosely.
         result: object = await client.ping()  # type: ignore[misc]
         return bool(result)
-    except Exception:
+    except Exception as exc:
+        log.warning(
+            "valkey.ping_failed",
+            error=type(exc).__name__,
+            message=str(exc)[:200],
+        )
         return False
+
+
+@asynccontextmanager
+async def subscribe_resilient(
+    channel: str,
+    *,
+    base_delay_s: float = 1.0,
+    max_delay_s: float = 30.0,
+    jitter_s: float = 0.5,
+) -> AsyncIterator[AsyncIterator[dict]]:
+    """Subscribe a `channel` con reconnect automático + backoff exponencial.
+
+    Yield: async iterator de mensajes. Si Valkey cae, el wrapper reconecta
+    en background; el consumidor sólo ve la pausa. Audit fix 2026-05.
+
+    Uso:
+        async with subscribe_resilient("alerts:user:abc") as messages:
+            async for msg in messages:
+                ...
+    """
+    async def _stream() -> AsyncIterator[dict]:
+        attempt = 0
+        while True:
+            try:
+                async with subscribe(channel) as pubsub:
+                    attempt = 0  # reset backoff after a successful connect
+                    while True:
+                        msg = await pubsub.get_message(
+                            ignore_subscribe_messages=True, timeout=30.0
+                        )
+                        if msg is None:
+                            continue
+                        if msg.get("type") != "message":
+                            continue
+                        yield msg
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                delay = min(
+                    base_delay_s * (2**attempt), max_delay_s
+                ) + random.uniform(0, jitter_s)
+                attempt += 1
+                log.warning(
+                    "pubsub.reconnect",
+                    channel=channel,
+                    attempt=attempt,
+                    delay_s=round(delay, 2),
+                    error=type(exc).__name__,
+                )
+                await asyncio.sleep(delay)
+
+    yield _stream()

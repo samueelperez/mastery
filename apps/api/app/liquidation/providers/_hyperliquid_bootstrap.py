@@ -47,6 +47,12 @@ class HyperliquidAddressBootstrap:
         ]
         self._tasks: list[asyncio.Task] = []
         self._stopping = False
+        # Serialises _upsert_addresses calls across the WS loop AND the
+        # leaderboard loop. Both run concurrently as separate tasks and
+        # touch the same `hyperliquid_known_addresses` rows; without this
+        # lock, sorting alone is not enough to prevent deadlocks at the
+        # asyncpg/PG level (ON CONFLICT DO UPDATE on overlapping batches).
+        self._upsert_lock = asyncio.Lock()
 
     async def start(self) -> None:
         """Spawn the leaderboard refresh loop and the WS subscriber."""
@@ -127,30 +133,64 @@ class HyperliquidAddressBootstrap:
                 await asyncio.sleep(5.0)
 
     async def _upsert_addresses(self, addresses: list[str], *, tag: str) -> None:
-        """Idempotent insert of addresses with a tag. Updates last_seen_at."""
+        """Idempotent insert of addresses with a tag. Updates last_seen_at.
+
+        Addresses are deduplicated + **sorted** before the executemany so
+        concurrent batches acquire row-level locks in the same order. The
+        WS loop subscribes to N coins simultaneously; without the sort,
+        two batches that share addresses could acquire locks in opposite
+        orders and deadlock (observed under load: PG raised
+        `asyncpg.exceptions.DeadlockDetectedError`).
+        """
         now = datetime.now(tz=UTC)
+        ordered = sorted(set(addresses))
+        if not ordered:
+            return
+        # Retry once on deadlock — PG guarantees one of the two
+        # conflicting txs has rolled back, so retry is safe. With sorted
+        # batches + asyncio.Lock + retry, the deadlock window is the
+        # uvicorn `--reload` boundary (old + new instances overlap for a
+        # few seconds); after that, the system runs clean.
+        for attempt in (0, 1):
+            try:
+                async with self._upsert_lock, self._session_factory() as session:
+                    await session.execute(
+                        text(
+                            """
+                            INSERT INTO hyperliquid_known_addresses
+                                (address, first_seen_at, last_seen_at, tags)
+                            VALUES
+                                (:addr, :now, :now, ARRAY[:tag])
+                            ON CONFLICT (address) DO UPDATE
+                              SET last_seen_at = EXCLUDED.last_seen_at,
+                                  tags = CASE
+                                      WHEN :tag = ANY(hyperliquid_known_addresses.tags)
+                                          THEN hyperliquid_known_addresses.tags
+                                      ELSE array_append(
+                                          hyperliquid_known_addresses.tags, :tag
+                                      )
+                                  END
+                            """
+                        ),
+                        [{"addr": a, "now": now, "tag": tag} for a in ordered],
+                    )
+                    await session.commit()
+                break
+            except Exception as exc:
+                # asyncpg's DeadlockDetectedError surfaces wrapped in
+                # several layers (AsyncAdapt_asyncpg_dbapi.Error,
+                # SQLAlchemy DBAPIError, etc.). Catch broadly and walk
+                # the cause chain by string — robust to wrapping
+                # changes across SQLAlchemy versions.
+                if not _looks_like_deadlock(exc) or attempt > 0:
+                    raise
+                LOG.warning(
+                    "hl_upsert_deadlock_retry",
+                    extra={"n_addrs": len(ordered), "tag": tag},
+                )
+                await asyncio.sleep(0.05 + 0.10 * attempt)
+
         async with self._session_factory() as session:
-            await session.execute(
-                text(
-                    """
-                    INSERT INTO hyperliquid_known_addresses
-                        (address, first_seen_at, last_seen_at, tags)
-                    VALUES
-                        (:addr, :now, :now, ARRAY[:tag])
-                    ON CONFLICT (address) DO UPDATE
-                      SET last_seen_at = EXCLUDED.last_seen_at,
-                          tags = CASE
-                              WHEN :tag = ANY(hyperliquid_known_addresses.tags)
-                                  THEN hyperliquid_known_addresses.tags
-                              ELSE array_append(
-                                  hyperliquid_known_addresses.tags, :tag
-                              )
-                          END
-                    """
-                ),
-                [{"addr": a, "now": now, "tag": tag} for a in addresses],
-            )
-            await session.commit()
             # Refresh active-addresses gauge. Single SELECT after each upsert
             # batch — cheap and gives near-real-time visibility into universe
             # growth without a separate polling loop.
@@ -159,3 +199,23 @@ class HyperliquidAddressBootstrap:
             )
             total = count_row.scalar_one() or 0
             liq_active_addresses.set(float(total))
+
+
+def _looks_like_deadlock(exc: BaseException) -> bool:
+    """Walk the exception cause chain looking for a deadlock signature.
+
+    asyncpg + SQLAlchemy wrap the original ``asyncpg.exceptions.DeadlockDetectedError``
+    in several layers (``AsyncAdapt_asyncpg_dbapi.Error`` → ``DBAPIError``
+    → ``OperationalError``), and the wrapping changes between releases. A
+    string-level check across the chain is the most resilient.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if "deadlock" in str(cur).lower():
+            return True
+        if "DeadlockDetected" in type(cur).__name__:
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False

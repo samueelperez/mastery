@@ -14,6 +14,7 @@ Punto único de entrada para todas las reviews automáticas. Maneja:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -32,6 +33,7 @@ from app.reviewer.repo import (
     compute_next_review_at,
     get_last_reviews,
     insert_review,
+    release_review_claim_on_failure,
 )
 from app.reviewer.system_prompt import REVIEW_SYSTEM_PROMPT_VERSION
 from app.setups.repo import OpenSetupRow
@@ -39,7 +41,6 @@ from app.setups.repo import OpenSetupRow
 log = structlog.get_logger(__name__)
 
 # Global semaphore — lazily created to avoid binding to a different event loop.
-_concurrency_lock: asyncio.Lock | None = None
 _concurrency_sem: asyncio.Semaphore | None = None
 
 
@@ -132,81 +133,103 @@ async def _maybe_run_review_inner(
         return None
 
     # 2) Throttle global con semáforo (bound concurrent agent calls).
+    #    Si el agent.run o la persistencia fallan tras un claim exitoso,
+    #    liberamos el claim para no dejar el setup bloqueado cooldown_min
+    #    (audit fix 2026-05: claim rollback).
     sem = _get_semaphore()
-    async with sem:
-        # 3) Re-verify status DESPUÉS del cooldown claim — el setup pudo
-        #    haber cerrado (SL hit, todos TPs) mientras esperábamos slot.
-        status_ok = await _setup_is_open_for_review(setup.id)
-        if not status_ok:
-            log.debug(
-                "review.setup_no_longer_active",
+    claim_released = False
+    try:
+        async with sem:
+            # 3) Re-verify status DESPUÉS del cooldown claim — el setup pudo
+            #    haber cerrado (SL hit, todos TPs) mientras esperábamos slot.
+            status_ok = await _setup_is_open_for_review(setup.id)
+            if not status_ok:
+                # Setup ya cerrado — liberamos el claim porque no habrá review.
+                async with session_scope() as session:
+                    await release_review_claim_on_failure(session, trade_id=setup.id)
+                claim_released = True
+                log.debug(
+                    "review.setup_no_longer_active",
+                    setup_id=setup.id,
+                    trigger_kind=trigger_kind,
+                )
+                return None
+
+            # 4) Historic context: las últimas 3 reviews.
+            async with session_scope() as session:
+                prior_reviews = await get_last_reviews(
+                    session, trade_id=setup.id, user_id=setup.user_id, limit=3
+                )
+
+            # 5) Build user prompt + deps + invoke.
+            prompt = _build_review_user_prompt(
+                setup=setup,
+                trigger_kind=trigger_kind,
+                trigger_payload=trigger_payload,
+                current_price=current_price,
+                candle_ts=candle_ts,
+                prior_reviews=prior_reviews,
+            )
+            deps = AgentDeps(
+                session_factory=session_scope,
+                log=log,
+                user_id=setup.user_id,
+            )
+
+            log.info(
+                "review.dispatched",
                 setup_id=setup.id,
+                user_id=setup.user_id,
+                symbol=setup.symbol,
+                timeframe=setup.timeframe,
                 trigger_kind=trigger_kind,
             )
-            return None
-
-        # 4) Historic context: las últimas 3 reviews.
-        async with session_scope() as session:
-            prior_reviews = await get_last_reviews(
-                session, trade_id=setup.id, limit=3
+            started = time.perf_counter()
+            # Hard timeout audit fix 2026-05: si OpenRouter cuelga, el slot
+            # del semáforo se libera y otros reviews pueden avanzar.
+            result = await asyncio.wait_for(
+                get_review_agent().run(prompt, deps=deps),
+                timeout=settings.review_timeout_s,
             )
+            duration_ms = int((time.perf_counter() - started) * 1000)
 
-        # 5) Build user prompt + deps + invoke.
-        prompt = _build_review_user_prompt(
-            setup=setup,
-            trigger_kind=trigger_kind,
-            trigger_payload=trigger_payload,
-            current_price=current_price,
-            candle_ts=candle_ts,
-            prior_reviews=prior_reviews,
+            review: TradeReview = result.output
+
+        # 6) Extract usage + cost.
+        usage_tokens, cost_usd = _extract_usage_and_cost(result, settings)
+
+        # 7) Compute next time-based review.
+        now_utc = datetime.now(tz=UTC)
+        next_review_at = compute_next_review_at(
+            entry_hit_at=setup.entry_hit_at,
+            now=now_utc,
+            offsets_hours=settings.review_time_offsets_list,
         )
-        deps = AgentDeps(
-            session_factory=session_scope,
-            log=log,
-            user_id=setup.user_id,
-        )
 
-        log.info(
-            "review.dispatched",
-            setup_id=setup.id,
-            user_id=setup.user_id,
-            symbol=setup.symbol,
-            timeframe=setup.timeframe,
-            trigger_kind=trigger_kind,
-        )
-        started = time.perf_counter()
-        result = await get_review_agent().run(prompt, deps=deps)
-        duration_ms = int((time.perf_counter() - started) * 1000)
-
-        review: TradeReview = result.output
-
-    # 6) Extract usage + cost.
-    usage_tokens, cost_usd = _extract_usage_and_cost(result, settings)
-
-    # 7) Compute next time-based review.
-    now_utc = datetime.now(tz=UTC)
-    next_review_at = compute_next_review_at(
-        entry_hit_at=setup.entry_hit_at,
-        now=now_utc,
-        offsets_hours=settings.review_time_offsets_list,
-    )
-
-    # 8) Persist (review + event + cooldown bumps).
-    async with session_scope() as session:
-        review_id = await insert_review(
-            session,
-            trade_id=setup.id,
-            user_id=setup.user_id,
-            trigger_kind=trigger_kind,
-            trigger_payload=trigger_payload,
-            review=review,
-            price_at_review=current_price,
-            model_id=REVIEW_MODEL_ID,
-            usage_tokens=usage_tokens,
-            cost_usd=cost_usd,
-            prompt_version=REVIEW_SYSTEM_PROMPT_VERSION,
-            next_review_at=next_review_at,
-        )
+        # 8) Persist (review + event + cooldown bumps).
+        async with session_scope() as session:
+            review_id = await insert_review(
+                session,
+                trade_id=setup.id,
+                user_id=setup.user_id,
+                trigger_kind=trigger_kind,
+                trigger_payload=trigger_payload,
+                review=review,
+                price_at_review=current_price,
+                model_id=REVIEW_MODEL_ID,
+                usage_tokens=usage_tokens,
+                cost_usd=cost_usd,
+                prompt_version=REVIEW_SYSTEM_PROMPT_VERSION,
+                next_review_at=next_review_at,
+            )
+    except Exception:
+        # Agent crash, OpenRouter timeout, persistence error → liberar el
+        # claim para que un retry posterior no espere cooldown_minutes.
+        if not claim_released:
+            with contextlib.suppress(Exception):
+                async with session_scope() as session:
+                    await release_review_claim_on_failure(session, trade_id=setup.id)
+        raise
 
     # 9) Push al frontend (best-effort; falla silenciosa si Valkey está down).
     try:

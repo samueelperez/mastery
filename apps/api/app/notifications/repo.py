@@ -14,7 +14,23 @@ async def set_telegram_chat_id(
     session: AsyncSession, *, user_id: str, chat_id: str
 ) -> None:
     """Vincula un chat_id a un user_id. Upsert — si el user ya tenía un
-    chat_id (re-bind tras cambiar de cuenta de Telegram), se sobrescribe."""
+    chat_id se sobrescribe. Antes del INSERT desvincula a cualquier otro
+    user que tuviera el mismo chat_id (defense against hijacking + complemento
+    al UNIQUE INDEX de migración 022 que de otro modo abortaría el INSERT)."""
+    # Step 1: desvincular dueño previo si lo había.
+    await session.execute(
+        text(
+            """
+            UPDATE user_notification_settings
+            SET telegram_chat_id = NULL,
+                telegram_linked_at = NULL,
+                updated_at = now()
+            WHERE telegram_chat_id = :chat_id AND user_id != :uid
+            """
+        ),
+        {"uid": user_id, "chat_id": chat_id},
+    )
+    # Step 2: bind al user actual.
     await session.execute(
         text(
             """

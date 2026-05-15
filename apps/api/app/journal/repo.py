@@ -10,7 +10,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +38,10 @@ class JournalTradeIn(BaseModel):
     mistakes: str | None = None
     news_24h: dict[str, Any] | None = None
     features: dict[str, Any] | None = None
-    summary_text: str
+    # 300-char truncation invariant (CLAUDE.md). Sin esto el listing
+    # devuelve summaries cuyo render rompe layout (~600 chars en
+    # casos reales). Audit fix 2026-05.
+    summary_text: str = Field(..., max_length=300)
     summary_hash: str
     embedding: list[float] | None = None
     embedding_version: int = 1
@@ -178,7 +181,11 @@ async def update_summary_and_embedding(
 # -----------------------------------------------------------------------------
 
 
-async def get_by_id(session: AsyncSession, trade_id: str) -> JournalTradeRow | None:
+async def get_by_id(
+    session: AsyncSession, trade_id: str, *, user_id: str
+) -> JournalTradeRow | None:
+    """Lee un trade por id. `user_id` es obligatorio — sin scoping un user
+    podía leer trades de otro si conocía el UUID (audit fix 2026-05)."""
     row = (
         await session.execute(
             text(
@@ -186,10 +193,11 @@ async def get_by_id(session: AsyncSession, trade_id: str) -> JournalTradeRow | N
                 SELECT id, user_id, trade_ts, symbol, timeframe, mode, side,
                        entry_px, exit_px, size, r_multiple, setup_tag, regime, mistakes,
                        summary_text, summary_hash, embedding_version
-                FROM journal_trades WHERE id = CAST(:id AS uuid)
+                FROM journal_trades
+                WHERE id = CAST(:id AS uuid) AND user_id = :uid
                 """
             ),
-            {"id": trade_id},
+            {"id": trade_id, "uid": user_id},
         )
     ).mappings().one_or_none()
     return JournalTradeRow.model_validate(dict(row)) if row else None
@@ -222,13 +230,24 @@ async def list_recent(
     return [JournalTradeRow.model_validate(dict(r)) for r in rows]
 
 
+async def list_users_with_trades(session: AsyncSession) -> Sequence[str]:
+    """Returns distinct user_ids that own journal_trades. Used by
+    embed_backfill to iterate per-user (audit fix 2026-05)."""
+    rows = (
+        await session.execute(
+            text("SELECT DISTINCT user_id FROM journal_trades ORDER BY user_id")
+        )
+    ).scalars().all()
+    return list(rows)
+
+
 async def list_all_for_embed_check(
-    session: AsyncSession, *, batch_size: int = 100
+    session: AsyncSession, *, user_id: str, batch_size: int = 100
 ) -> Sequence[JournalTradeRow]:
-    """Trades that may need re-embedding. Caller (embed_backfill.py) computes
-    the canonical summary in Python and compares against `summary_hash` to
-    detect drift — we don't push the hash check into SQL because pgcrypto
-    isn't an assumed extension and the row count here is small.
+    """Trades del user que pueden necesitar re-embedding. El caller
+    (embed_backfill.py) computa el summary canónico en Python y lo compara
+    con `summary_hash`. `user_id` es obligatorio — antes mezclaba trades
+    cross-user en el re-embed (audit fix 2026-05).
     """
     rows = (
         await session.execute(
@@ -238,11 +257,12 @@ async def list_all_for_embed_check(
                        entry_px, exit_px, size, r_multiple, setup_tag, regime, mistakes,
                        summary_text, summary_hash, embedding_version
                 FROM journal_trades
+                WHERE user_id = :uid
                 ORDER BY trade_ts ASC
                 LIMIT :lim
                 """
             ),
-            {"lim": batch_size},
+            {"uid": user_id, "lim": batch_size},
         )
     ).mappings().all()
     return [JournalTradeRow.model_validate(dict(r)) for r in rows]
@@ -325,6 +345,8 @@ _HYBRID_SQL = text(
     -- se ejecutó). Las listas failure_factors/success_factors no son
     -- columnas; viven dentro de factor_verdicts JSONB. El cliente Python
     -- las deriva filtrando por verdict ∈ {'failed','worked'} en _hit_from_row.
+    -- Defense-in-depth: el JOIN exige pm.user_id = :uid aunque en condiciones
+    -- normales pm.trade_id → t.id ya lo garantiza vía FK.
     SELECT t.id::text AS id, t.trade_ts, t.symbol, t.timeframe, t.side, t.setup_tag,
            t.regime, t.r_multiple, t.summary_text, f.rrf AS rrf_score,
            pm.verdict AS pm_verdict,
@@ -333,7 +355,8 @@ _HYBRID_SQL = text(
            pm.confidence_calibration AS pm_confidence_calibration
     FROM journal_trades t
     JOIN fused f USING (id)
-    LEFT JOIN setup_post_mortems pm ON pm.trade_id = t.id
+    LEFT JOIN setup_post_mortems pm
+      ON pm.trade_id = t.id AND pm.user_id = :uid
     ORDER BY f.rrf DESC
     """
 )

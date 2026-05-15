@@ -69,6 +69,7 @@ async def run_walk_forward(
     session: AsyncSession,
     *,
     base_spec: BacktestSpec,
+    user_id: str,
     is_months: int = 12,
     oos_months: int = 3,
     embargo_days: int = 1,
@@ -105,7 +106,7 @@ async def run_walk_forward(
         )
         try:
             result = await run_backtest(
-                session, spec=oos_spec, exchange=exchange, persist=False
+                session, spec=oos_spec, user_id=user_id, exchange=exchange, persist=False
             )
         except ValueError as e:
             # Insufficient data in this OOS window; skip.

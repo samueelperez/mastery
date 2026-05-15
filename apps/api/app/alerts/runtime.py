@@ -30,7 +30,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.tools._time import floor_to_timeframe
+from app.core.time import floor_to_timeframe
 from app.alerts.dsl import RuleSpec
 from app.alerts.evaluator import build_snapshot, evaluate_rule
 from app.alerts.panel_service import compute_panel_for_specs
@@ -132,13 +132,43 @@ async def _record_hits_batch(
     *,
     hits: list[tuple[dict[str, Any], dict[str, Any]]],
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    """Insert N alert_events + bump last_fired_at for N rules in one session.
+    """Insert N alert_events + atomic claim of last_fired_at for each rule.
 
-    Returns `(rule, payload)` pairs in input order — the caller needs the rule
-    to know which user_id to publish to.
+    Atomic claim (audit fix 2026-05): el UPDATE de `last_fired_at` se ejecuta
+    como gate con WHERE condicional sobre cooldown — si dos workers ven la
+    misma regla cooled-down simultáneamente, sólo uno consigue rowcount=1
+    y mete el evento. El otro rebota con `cooldown_blocked_atomic`.
+
+    Returns `(rule, payload)` pairs en orden de input.
     """
     out: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for rule, snapshot in hits:
+        cooldown_s = float(rule.get("cooldown_s") or 0)
+        # Atomic claim: UPDATE bumpea last_fired_at sólo si está fuera de
+        # cooldown. rowcount=0 → otro worker se llevó el slot.
+        claim = await session.execute(
+            text(
+                """
+                UPDATE alert_rules
+                SET last_fired_at = now(), updated_at = now()
+                WHERE id = CAST(:rid AS uuid)
+                  AND (
+                    :cd <= 0
+                    OR last_fired_at IS NULL
+                    OR last_fired_at < now() - make_interval(secs => :cd)
+                  )
+                """
+            ),
+            {"rid": rule["id"], "cd": cooldown_s},
+        )
+        if (claim.rowcount or 0) == 0:  # type: ignore[attr-defined]
+            log.info(
+                "alerts.cooldown_blocked_atomic",
+                rule_id=rule["id"],
+                user_id=rule["user_id"],
+            )
+            continue
+
         row = (
             await session.execute(
                 text(
@@ -155,15 +185,6 @@ async def _record_hits_batch(
                 },
             )
         ).mappings().one()
-        await session.execute(
-            text(
-                """
-                UPDATE alert_rules SET last_fired_at = now(), updated_at = now()
-                WHERE id = CAST(:rid AS uuid)
-                """
-            ),
-            {"rid": rule["id"]},
-        )
         out.append(
             (
                 rule,
@@ -183,20 +204,28 @@ async def _record_hits_batch(
 
 async def _evaluate_close(symbol: str, timeframe: str) -> None:
     """Single closed-candle pass — read rules, compute panel once, evaluate all,
-    persist hits in one transaction."""
+    persist hits in one transaction.
+
+    Las sesiones se abren por fases (audit fix 2026-05): retener una única
+    session_scope durante el `compute_panel_for_specs` agotaba el pool bajo
+    carga porque Timescale I/O bloqueaba el slot durante toda la query.
+    """
+    # Phase 1: fetch + compile active rules.
     async with session_scope() as session:
         rules = await _fetch_active_rules(session, symbol=symbol, timeframe=timeframe)
-        if not rules:
-            return
-        compiled: list[tuple[dict[str, Any], RuleSpec]] = []
-        for r in rules:
-            spec = _compile_spec(r)
-            if spec is not None:
-                compiled.append((r, spec))
-        if not compiled:
-            return
+    if not rules:
+        return
+    compiled: list[tuple[dict[str, Any], RuleSpec]] = []
+    for r in rules:
+        spec = _compile_spec(r)
+        if spec is not None:
+            compiled.append((r, spec))
+    if not compiled:
+        return
 
-        until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
+    # Phase 2: compute panel in a fresh session (Timescale heavy I/O).
+    until = floor_to_timeframe(datetime.now(tz=UTC), timeframe)
+    async with session_scope() as session:
         panel = await compute_panel_for_specs(
             session,
             symbol=symbol,
@@ -306,8 +335,21 @@ async def _market_loop(symbol: str, timeframe: str) -> None:
             await asyncio.sleep(2.0)
 
 
+# Advisory-lock id arbitrario (constante de proceso). Cualquier réplica que
+# corra `_bias_listener_loop` intenta adquirir este lock; sólo una lo
+# consigue y los demás reintentan. Single-elected listener evita la
+# duplicación N× de `alert_events` cuando hay >1 worker (audit fix 2026-05).
+_BIAS_LISTENER_LOCK_ID = 0x42_42_5B_15  # stable arbitrary int
+
+
 async def _bias_listener_loop() -> None:
-    """LISTEN bias_events_high — promote high-severity bias to an alert_event."""
+    """LISTEN bias_events_high — promote high-severity bias to an alert_event.
+
+    Single-elected vía `pg_try_advisory_lock`: si la API corre con N réplicas
+    o N workers, solo la primera consigue el lock y se suscribe; las demás
+    reintentan cada 10s. Sin esto, cada réplica recibe la NOTIFY y promueve
+    el mismo bias N veces → eventos duplicados (audit fix 2026-05).
+    """
     settings = get_settings()
     # asyncpg expects 'postgresql://' not 'postgresql+asyncpg://'.
     raw_url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
@@ -316,6 +358,15 @@ async def _bias_listener_loop() -> None:
         try:
             conn = await asyncpg.connect(raw_url)
             try:
+                got_lock = await conn.fetchval(
+                    "SELECT pg_try_advisory_lock($1)", _BIAS_LISTENER_LOCK_ID
+                )
+                if not got_lock:
+                    log.info("alerts.bias_listener.standby")
+                    await conn.close()
+                    await asyncio.sleep(10.0)
+                    continue
+
                 async def _on_notify(
                     _conn: asyncpg.Connection,
                     _pid: int,
@@ -327,11 +378,17 @@ async def _bias_listener_loop() -> None:
                     await _record_bias_promoted(payload)
 
                 await conn.add_listener("bias_events_high", _on_notify)
+                log.info("alerts.bias_listener.elected")
                 # Park task; teardown on cancellation triggers the finally block.
                 await asyncio.Event().wait()
             finally:
                 with contextlib.suppress(Exception):
                     await conn.remove_listener("bias_events_high", _on_notify)
+                with contextlib.suppress(Exception):
+                    # Liberar el advisory lock libera al siguiente standby.
+                    await conn.execute(
+                        "SELECT pg_advisory_unlock($1)", _BIAS_LISTENER_LOCK_ID
+                    )
                 with contextlib.suppress(Exception):
                     await conn.close()
         except asyncio.CancelledError:
@@ -344,13 +401,26 @@ async def _bias_listener_loop() -> None:
 
 async def _record_bias_promoted(bias_payload_json: str) -> None:
     """Insert + publish in one shot. `bias_payload_json` is the raw JSON string
-    from pg_notify; we only parse what we need for the log/key fields."""
+    from pg_notify; we only parse what we need for the log/key fields.
+
+    Validamos `user_id` explícito antes de aceptar: si la payload del trigger
+    `notify_bias_high` cambia o un row corrupto se cuela, evitamos enviar el
+    bias al user legacy `'me'` por accidente (audit fix 2026-05)."""
     try:
         bias_event = json.loads(bias_payload_json)
     except Exception:
         log.warning("alerts.bias_payload_unparseable", payload=bias_payload_json)
         return
-    user_id = bias_event.get("user_id", "me")
+    if not isinstance(bias_event, dict):
+        log.warning("alerts.bias_payload_not_dict", payload=bias_payload_json[:200])
+        return
+    user_id = bias_event.get("user_id")
+    if not user_id or not isinstance(user_id, str):
+        log.warning(
+            "alerts.bias_payload_missing_user",
+            payload_keys=sorted(bias_event.keys()),
+        )
+        return
     async with session_scope() as session:
         row = (
             await session.execute(
@@ -405,10 +475,36 @@ class AlertsRuntime:
         log.info("alerts.runtime.start", n_market_loops=len(self._tasks) - 1)
 
     async def stop(self) -> None:
+        # Cancel + await market loops + bias listener.
         for t in self._tasks:
             t.cancel()
         for t in self._tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await t
         self._tasks.clear()
+
+        # Drain in-flight scout dispatch tasks (audit fix 2026-05). Antes
+        # quedaban como "Task was destroyed but it is pending!" si shutdown
+        # ocurría mientras un scout estaba mid-flight → pérdida silenciosa
+        # de proposals durante deploys.
+        pending_scouts = list(_SCOUT_TASKS)
+        if pending_scouts:
+            log.info(
+                "alerts.runtime.draining_scout_tasks",
+                n_pending=len(pending_scouts),
+            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending_scouts, return_exceptions=True),
+                    timeout=10.0,
+                )
+            except TimeoutError:
+                # Después del timeout cancelamos los restantes.
+                for t in pending_scouts:
+                    if not t.done():
+                        t.cancel()
+                log.warning(
+                    "alerts.runtime.scout_drain_timeout",
+                    n_cancelled=sum(1 for t in pending_scouts if not t.done()),
+                )
         log.info("alerts.runtime.stop")

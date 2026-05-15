@@ -54,8 +54,9 @@ async def claim_review_slot(
 
     Llamar ANTES de invocar al agente. El bump real de `last_review_at` y
     `review_count` ocurre dentro de `insert_review` (path feliz). Si el
-    agente falla, `last_review_attempt_at` ya quedó actualizado y previene
-    re-intentos inmediatos.
+    agente falla, el caller debe llamar `release_review_claim_on_failure()`
+    para no dejar el setup bloqueado por `cooldown_minutes` (audit fix
+    2026-05).
     """
     result = await session.execute(
         text(
@@ -81,6 +82,33 @@ async def claim_review_slot(
         },
     )
     return int(result.rowcount) > 0  # type: ignore[attr-defined]
+
+
+async def release_review_claim_on_failure(
+    session: AsyncSession, *, trade_id: str
+) -> None:
+    """Revierte el bump de `last_review_attempt_at` cuando el agent.run() o
+    persistencia falla — sin esto el setup queda bloqueado `cooldown_minutes`
+    sin que ningún review se haya producido (audit fix 2026-05).
+
+    Sólo limpia el attempt si NO hubo un review exitoso en el ínterin (el
+    caller llama esto en el `except` después de un claim). Si hubo review,
+    `last_review_at IS NOT NULL` y el setup ya tiene el cooldown legítimo.
+    """
+    await session.execute(
+        text(
+            """
+            UPDATE journal_trades
+            SET last_review_attempt_at = NULL
+            WHERE id = CAST(:tid AS uuid)
+              AND (
+                last_review_at IS NULL
+                OR last_review_at < last_review_attempt_at
+              )
+            """
+        ),
+        {"tid": trade_id},
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -275,10 +303,12 @@ async def get_last_reviews(
     session: AsyncSession,
     *,
     trade_id: str,
+    user_id: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
     """Las N reviews más recientes — para inyectar en el user prompt del
-    review_agent como contexto histórico."""
+    review_agent como contexto histórico. `user_id` es defense-in-depth
+    (audit fix 2026-05: list_reviews_for_setup ya scopes, esta también)."""
     rows = (
         await session.execute(
             text(
@@ -286,12 +316,12 @@ async def get_last_reviews(
                 SELECT trigger_kind, current_state, recommendation,
                        summary, created_at
                 FROM setup_reviews
-                WHERE trade_id = CAST(:tid AS uuid)
+                WHERE trade_id = CAST(:tid AS uuid) AND user_id = :uid
                 ORDER BY created_at DESC
                 LIMIT :lim
                 """
             ),
-            {"tid": trade_id, "lim": limit},
+            {"tid": trade_id, "uid": user_id, "lim": limit},
         )
     ).mappings().all()
     return [dict(r) for r in rows]
@@ -416,4 +446,5 @@ __all__ = [
     "insert_review",
     "list_active_setups_due_for_time_review",
     "list_reviews_for_setup",
+    "release_review_claim_on_failure",
 ]

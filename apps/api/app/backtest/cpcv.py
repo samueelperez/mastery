@@ -61,6 +61,7 @@ async def run_cpcv(
     session: AsyncSession,
     *,
     base_spec: BacktestSpec,
+    user_id: str,
     n_folds: int = 10,
     n_test_folds: int = 2,
     embargo_size: int = 5,
@@ -74,7 +75,10 @@ async def run_cpcv(
     correct only if the strategy is path-dependent in ways our trades aren't).
     For F2's signal-based strategies, slicing the equity curve is sufficient.
     """
-    full = await run_backtest(session, spec=base_spec, exchange=exchange, persist=False)
+    full = await run_backtest(
+        session, spec=base_spec, user_id=user_id, exchange=exchange, persist=False
+    )
+    ann_factor = annualization_factor_for(base_spec.timeframe)
     eq = np.array([e for _, e in full.equity_curve], dtype=np.float64)
     if eq.size < n_folds * 5:
         log.warning("cpcv.too_few_bars", n_bars=eq.size, n_folds=n_folds)
@@ -106,8 +110,8 @@ async def run_cpcv(
         train_rets = rets[train_idx]
         if test_rets.std(ddof=1) == 0 or train_rets.std(ddof=1) == 0:
             continue
-        s_test = float(test_rets.mean() / test_rets.std(ddof=1) * np.sqrt(252))
-        s_train = float(train_rets.mean() / train_rets.std(ddof=1) * np.sqrt(252))
+        s_test = float(test_rets.mean() / test_rets.std(ddof=1) * ann_factor)
+        s_train = float(train_rets.mean() / train_rets.std(ddof=1) * ann_factor)
         sharpes.append(s_test)
         # PBO: rank within the fold pair (we have only 2 ranks per pair: train vs test)
         is_ranks.append(2 if s_train >= s_test else 1)

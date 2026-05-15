@@ -17,6 +17,7 @@ Diferencias vs review_dispatcher:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from datetime import UTC, datetime
@@ -26,7 +27,8 @@ import structlog
 from sqlalchemy import text
 
 from app.agent.deps import AgentDeps
-from app.agent.models import PostMortem
+from app.agent.models import PostMortem, TriggerKind
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.agent.tools.confluence import (
     compute_score_components,
     confluence_map_to_factor_snapshot_deterministic,
@@ -57,7 +59,7 @@ async def maybe_run_post_mortem(
     *,
     trade_id: str,
     user_id: str,
-    trigger_kind: str,  # 'setup_closed_sl' | 'setup_closed_tp'
+    trigger_kind: TriggerKind,
     candle_ts: datetime,
 ) -> str | None:
     """Fire-and-forget entry point. Devuelve el post_mortem_id si se insertó,
@@ -125,7 +127,7 @@ async def _maybe_run_post_mortem_inner(
 
     # 2) Compute MFE/MAE from OHLCV in window entry_hit_at → closed_at.
     mfe_mae = await _compute_mfe_mae(
-        exchange=settings.exchange if hasattr(settings, "exchange") else "binance_usdm",
+        exchange=EXCHANGE_NAME,
         symbol=setup_data["symbol"],
         timeframe=setup_data["timeframe"],
         side=setup_data["side"],
@@ -154,7 +156,7 @@ async def _maybe_run_post_mortem_inner(
         symbol=setup_data["symbol"],
         factor_snapshot=setup_data["factor_snapshot"],
         closed_at=setup_data["closed_at"] or candle_ts,
-        exchange=getattr(settings, "exchange", "binance_usdm"),
+        exchange=EXCHANGE_NAME,
     )
 
     # 4) Throttle global con semáforo.
@@ -216,7 +218,6 @@ async def _maybe_run_post_mortem_inner(
             confidence_calibration=pm.confidence_calibration,
             factor_verdicts=factor_verdicts,
             lesson_es=pm.lesson_es,
-            summary_es=pm.lesson_es,  # summary == lesson para post-mortem v1
             counterfactual_es=pm.counterfactual_es,
             entry_vs_exit_delta=entry_vs_exit_delta,
             citations=[c.model_dump(mode="json") for c in pm.citations],
@@ -283,8 +284,6 @@ async def _maybe_run_post_mortem_inner(
 
 def _row_to_setup_data(row: dict[str, Any]) -> dict[str, Any]:
     """Normaliza tipos (Decimal → float, JSON string → dict/list)."""
-    import contextlib
-
     out: dict[str, Any] = dict(row)
     for k in ("entry_px", "stop_loss_px", "exit_px", "r_multiple"):
         if out.get(k) is not None:
