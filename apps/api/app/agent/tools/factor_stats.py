@@ -13,7 +13,7 @@ side, factor específico).
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -254,7 +254,7 @@ def register_factor_stats_tool(agent: Agent[AgentDeps, object]) -> None:
             ),
             provenance=Provenance(
                 source=f"db.factor_outcomes:{ctx.deps.user_id}:bayesian",
-                as_of=as_of_dt or datetime.fromtimestamp(0),
+                as_of=as_of_dt or datetime.fromtimestamp(0, tz=UTC),
                 rows=len(compact),
                 warnings=(
                     [] if compact else [

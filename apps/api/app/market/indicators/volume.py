@@ -36,8 +36,7 @@ def vwap(
         return df.with_columns((cum_pv / cum_v).alias(out))
 
     bucket = (
-        pl.col("ts").dt.truncate("1d") if anchor == "session"
-        else pl.col("ts").dt.truncate("1w")
+        pl.col("ts").dt.truncate("1d") if anchor == "session" else pl.col("ts").dt.truncate("1w")
     )
     return df.with_columns(
         (weighted.cum_sum().over(bucket) / pl.col("v").cum_sum().over(bucket)).alias(out)

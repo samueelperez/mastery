@@ -1,13 +1,15 @@
 """WebSocket fanout from Valkey pub/sub to browser clients.
 
-Endpoints:
+Endpoints (todos auth-gated):
   /ws/market?symbol=BTCUSDT&tf=1m   - one JSON per kline tick from Binance
-  /ws/alerts                        - one JSON per alert_event fired (auth-gated)
+  /ws/alerts                        - one JSON per alert_event fired
+  /ws/reviews                       - TradeReview events
 
-Both follow the same pattern: subscribe to the Valkey channel, forward each
-message to the browser. The alerts channel is populated by `app.alerts.runtime`
-and scoped to the authenticated user — the user_id comes from the BetterAuth
-session cookie, not a query string.
+Browsers no aceptan Authorization header en WS; el cliente pasa el token via
+query param `?token=…` cuando estamos en cross-domain (Vercel ↔ Railway) o
+via cookie cuando es same-origin. El token en query string puede aparecer en
+access logs de proxies/CDN intermedios — minimizado en logs internos (sin
+token_prefix). Para F4+ considerar mover a primer frame WS o subprotocol.
 """
 
 from __future__ import annotations
@@ -59,9 +61,16 @@ async def market_ws(
     symbol: str = Query(..., min_length=1, max_length=32),
     tf: str = Query(..., alias="tf", min_length=1, max_length=8),
 ) -> None:
+    # OHLCV es global (no per-user) pero exigimos auth para evitar DoS
+    # trivial y mantener consistencia con /ws/alerts y /ws/reviews.
+    user_id = await _ws_user_id(websocket)
+    if user_id is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        log.info("ws.market.unauth")
+        return
     await websocket.accept()
     channel = market_channel(exchange=EXCHANGE_NAME, symbol=symbol, timeframe=tf)
-    log.info("ws.client.connect", channel=channel)
+    log.info("ws.client.connect", channel=channel, user_id=user_id)
 
     try:
         async with subscribe(channel) as pubsub:
@@ -112,9 +121,7 @@ async def reviews_ws(websocket: WebSocket) -> None:
         async with subscribe(channel) as pubsub:
             await websocket.send_json({"type": "subscribed", "channel": channel})
             while True:
-                msg = await pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=30.0
-                )
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30.0)
                 if msg is None:
                     await websocket.send_json({"type": "ping"})
                     continue
@@ -152,9 +159,7 @@ async def alerts_ws(websocket: WebSocket) -> None:
         async with subscribe(channel) as pubsub:
             await websocket.send_json({"type": "subscribed", "channel": channel})
             while True:
-                msg = await pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=30.0
-                )
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=30.0)
                 if msg is None:
                     await websocket.send_json({"type": "ping"})
                     continue

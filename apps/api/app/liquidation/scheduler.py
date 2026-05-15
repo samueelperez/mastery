@@ -190,13 +190,18 @@ class LiquidationSnapshotScheduler:
     async def _fetch_current_price(self, symbol: str) -> float | None:
         """Latest 1m candle close — best proxy (fresh within 60s) without
         making an external HTTP call. If the 1m feed is offline for some
-        symbol the scheduler logs and skips that cycle."""
+        symbol the scheduler logs and skips that cycle.
+
+        Note: the OHLCV table uses short column names (`o, h, l, c, v`),
+        following the canonical exchange API convention — not the long
+        forms (`open`, `high`...). The `c` here is the candle close.
+        """
         async with self._session_factory() as session:
             row = (
                 await session.execute(
                     text(
                         """
-                        SELECT close::float AS price
+                        SELECT c::float AS price
                         FROM ohlcv
                         WHERE exchange = :exchange
                           AND symbol = :symbol

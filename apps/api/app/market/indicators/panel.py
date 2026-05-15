@@ -58,7 +58,7 @@ def _grouped_suffix(spec: IndicatorSpec) -> str:
         colisión.
 
     Mantiene backward compat con tests/clientes que esperan los nombres
-    "limpios" cuando no hay parametrización. """
+    "limpios" cuando no hay parametrización."""
     if spec.length is None:
         return ""
     default = _DEFAULT_LENGTHS.get(spec.name, 0)
@@ -70,7 +70,7 @@ def _grouped_suffix(spec: IndicatorSpec) -> str:
 def grouped_columns(spec: IndicatorSpec) -> list[str]:
     """Devuelve las columnas que producirá este spec en el panel.
     Usado por `agent/tools/indicators.py` para mapear cada spec a sus
-    columnas en el `latest` snapshot. """
+    columnas en el `latest` snapshot."""
     suf = _grouped_suffix(spec)
     match spec.name:
         case "macd":
@@ -148,8 +148,14 @@ async def compute_panel(
     )
     if not rows:
         return pl.DataFrame(
-            schema={"ts": pl.Datetime("us", "UTC"), "o": pl.Float64, "h": pl.Float64,
-                    "l": pl.Float64, "c": pl.Float64, "v": pl.Float64}
+            schema={
+                "ts": pl.Datetime("us", "UTC"),
+                "o": pl.Float64,
+                "h": pl.Float64,
+                "l": pl.Float64,
+                "c": pl.Float64,
+                "v": pl.Float64,
+            }
         )
 
     lf = pl.LazyFrame(

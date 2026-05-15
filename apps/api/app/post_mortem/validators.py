@@ -21,14 +21,7 @@ from app.agent.deps import AgentDeps
 from app.agent.models import PostMortem
 
 
-def _collect_tool_names(messages: list[ModelRequest | ModelResponse]) -> set[str]:
-    names: set[str] = set()
-    for msg in messages:
-        if isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, ToolCallPart):
-                    names.add(part.tool_name)
-    return names
+from app.agent._validator_utils import collect_tool_names as _collect_tool_names
 
 
 # Tools que el post-mortem NO puede citar como evidencia. `get_multi_tf_

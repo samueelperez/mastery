@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
@@ -46,7 +46,7 @@ def register_list_alerts_tool(agent: Agent[AgentDeps, object]) -> None:
             data={"rules": rules, "count": len(rules)},
             provenance=Provenance(
                 source="db.alert_rules",
-                as_of=datetime.now(),
+                as_of=datetime.now(tz=UTC),
                 rows=len(rules),
             ),
         )

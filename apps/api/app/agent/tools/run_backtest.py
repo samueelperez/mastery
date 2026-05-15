@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
@@ -63,7 +63,9 @@ def register_run_backtest_tool(agent: Agent[AgentDeps, object]) -> None:
         )
 
         async with ctx.deps.session_factory() as session:
-            result = await _run_backtest(session, spec=spec, exchange=ctx.deps.exchange)
+            result = await _run_backtest(
+                session, spec=spec, user_id=ctx.deps.user_id, exchange=ctx.deps.exchange
+            )
 
         m = result.metrics
         ctx.deps.log.info(
@@ -94,7 +96,7 @@ def register_run_backtest_tool(agent: Agent[AgentDeps, object]) -> None:
             },
             provenance=Provenance(
                 source=f"db.backtest_runs:{result.run_id}",
-                as_of=until or datetime.now(),
+                as_of=until or datetime.now(tz=UTC),
                 rows=m.n_trades,
                 warnings=(
                     ["DSR < 0.5: result likely overfit"] if m.overfit_warning else []

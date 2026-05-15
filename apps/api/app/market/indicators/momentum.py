@@ -24,8 +24,8 @@ def macd(
     ema_fast = src.ewm_mean(span=fast, adjust=False, min_samples=fast)
     ema_slow = src.ewm_mean(span=slow, adjust=False, min_samples=slow)
     macd_line = (ema_fast - ema_slow).alias(out_macd)
-    signal_line = (
-        macd_line.ewm_mean(span=signal, adjust=False, min_samples=signal).alias(out_signal)
+    signal_line = macd_line.ewm_mean(span=signal, adjust=False, min_samples=signal).alias(
+        out_signal
     )
     hist = (macd_line - signal_line).alias(out_hist)
     return df.with_columns(macd_line, signal_line, hist)

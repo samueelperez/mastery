@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
@@ -57,6 +57,7 @@ def register_walk_forward_tool(agent: Agent[AgentDeps, object]) -> None:
             result = await _run_walk_forward(
                 session,
                 base_spec=spec,
+                user_id=ctx.deps.user_id,
                 is_months=is_months,
                 oos_months=oos_months,
                 embargo_days=embargo_days,
@@ -97,7 +98,7 @@ def register_walk_forward_tool(agent: Agent[AgentDeps, object]) -> None:
             },
             provenance=Provenance(
                 source=f"db.backtest_runs:wf:{strategy_id}",
-                as_of=until or datetime.now(),
+                as_of=until or datetime.now(tz=UTC),
                 rows=len(result.folds),
                 warnings=(
                     ["aggregate avg_dsr < 0.5: edge not persistent across folds"]

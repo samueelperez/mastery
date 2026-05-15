@@ -75,14 +75,8 @@ async def record_ground_truth(
             LOG.warning("gt_no_heatmap_citation", extra={"setup_id": setup_id})
             return False
 
-        proposed_price = liq.get("nearest_short_liq_price") or liq.get(
-            "nearest_long_liq_price"
-        )
-        proposed_side = (
-            "short_liq"
-            if liq.get("nearest_short_liq_price")
-            else "long_liq"
-        )
+        proposed_price = liq.get("nearest_short_liq_price") or liq.get("nearest_long_liq_price")
+        proposed_side = "short_liq" if liq.get("nearest_short_liq_price") else "long_liq"
         if proposed_price is None:
             LOG.warning("gt_no_proposed_zone", extra={"setup_id": setup_id})
             return False
@@ -92,16 +86,12 @@ async def record_ground_truth(
         timeframe = liq.get("timeframe") or "4h"
 
         delta_a = (
-            abs(float(source_a_price) - float(proposed_price))
-            / float(proposed_price)
-            * 100
+            abs(float(source_a_price) - float(proposed_price)) / float(proposed_price) * 100
             if source_a_price is not None
             else None
         )
         delta_b = (
-            abs(float(source_b_price) - float(proposed_price))
-            / float(proposed_price)
-            * 100
+            abs(float(source_b_price) - float(proposed_price)) / float(proposed_price) * 100
             if source_b_price is not None
             else None
         )

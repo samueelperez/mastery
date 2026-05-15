@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
@@ -128,12 +128,12 @@ def register_journal_query_tool(agent: Agent[AgentDeps, object]) -> None:
             features=list(setup_features.keys()),
         )
         # `as_of` is the most recent matched trade or now if no hits.
-        as_of = max((h.trade_ts for h in hits), default=datetime.fromtimestamp(0))
+        as_of = max((h.trade_ts for h in hits), default=datetime.fromtimestamp(0, tz=UTC))
         return ToolResult(
             data=out,
             provenance=Provenance(
                 source="db.journal_trades:hybrid_search",
-                as_of=as_of if out else datetime.fromtimestamp(0),
+                as_of=as_of if out else datetime.fromtimestamp(0, tz=UTC),
                 rows=len(out),
                 warnings=[] if out else ["no historical trades match — journal too small or no overlap"],
             ),

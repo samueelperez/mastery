@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
@@ -41,7 +41,7 @@ def register_delete_alert_tool(agent: Agent[AgentDeps, object]) -> None:
             data={"alert_id": alert_id, "disabled": disabled},
             provenance=Provenance(
                 source=f"db.alert_rules:{alert_id}",
-                as_of=datetime.now(),
+                as_of=datetime.now(tz=UTC),
                 rows=1 if disabled else 0,
                 warnings=[] if disabled else [f"alert_id {alert_id} not found"],
             ),

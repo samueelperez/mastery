@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.tools._time import floor_to_timeframe
+from app.core.time import floor_to_timeframe
 from app.core.exchanges.types import OHLCVCandle
 from app.market.ohlcv.models import OHLCV
 
@@ -144,13 +144,10 @@ async def last_ts(
     """Most recent persisted candle timestamp, or None if the series is empty."""
     from sqlalchemy import func
 
-    stmt = (
-        select(func.max(OHLCV.ts))
-        .where(
-            OHLCV.exchange == exchange,
-            OHLCV.symbol == symbol,
-            OHLCV.timeframe == timeframe,
-        )
+    stmt = select(func.max(OHLCV.ts)).where(
+        OHLCV.exchange == exchange,
+        OHLCV.symbol == symbol,
+        OHLCV.timeframe == timeframe,
     )
     return (await session.execute(stmt)).scalar_one_or_none()
 

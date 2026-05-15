@@ -70,11 +70,7 @@ def rsi(
     # puras (avg_gain=0 → RSI=0). Cuando ambos son 0 (precio plano), el LLM
     # ve `null` (ambiguo, no inventamos un valor).
     denom = avg_gain + avg_loss
-    rsi_expr = (
-        pl.when(denom > 0)
-        .then(100.0 * avg_gain / denom)
-        .otherwise(None)
-    )
+    rsi_expr = pl.when(denom > 0).then(100.0 * avg_gain / denom).otherwise(None)
     return df.with_columns(rsi_expr.alias(col))
 
 

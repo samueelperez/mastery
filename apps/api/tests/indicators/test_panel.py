@@ -38,7 +38,7 @@ def _fake_rows(n: int) -> list[OHLCV]:
 async def test_compute_panel_chains_specs(monkeypatch: pytest.MonkeyPatch) -> None:
     rows = _fake_rows(200)
     fake_fetch = AsyncMock(return_value=rows)
-    monkeypatch.setattr("app.indicators.panel.fetch_range", fake_fetch)
+    monkeypatch.setattr("app.market.indicators.panel.fetch_range", fake_fetch)
 
     df = await compute_panel(
         session=None,  # type: ignore[arg-type]
@@ -100,7 +100,7 @@ async def test_compute_panel_no_collision_multiple_bbands(
     debe producir 2 sets de columnas, no una pisar a la otra."""
     rows = _fake_rows(200)
     fake_fetch = AsyncMock(return_value=rows)
-    monkeypatch.setattr("app.indicators.panel.fetch_range", fake_fetch)
+    monkeypatch.setattr("app.market.indicators.panel.fetch_range", fake_fetch)
 
     df = await compute_panel(
         session=None,  # type: ignore[arg-type]
@@ -128,7 +128,7 @@ async def test_compute_panel_no_collision_multiple_bbands(
 
 @pytest.mark.asyncio
 async def test_compute_panel_empty_returns_empty_df(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.indicators.panel.fetch_range", AsyncMock(return_value=[]))
+    monkeypatch.setattr("app.market.indicators.panel.fetch_range", AsyncMock(return_value=[]))
     df = await compute_panel(
         session=None,  # type: ignore[arg-type]
         exchange="binance_usdm",

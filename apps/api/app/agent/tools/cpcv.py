@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
@@ -63,6 +63,7 @@ def register_cpcv_tool(agent: Agent[AgentDeps, object]) -> None:
             result = await _run_cpcv(
                 session,
                 base_spec=spec,
+                user_id=ctx.deps.user_id,
                 n_folds=n_folds,
                 n_test_folds=n_test_folds,
                 embargo_size=embargo_size,
@@ -95,7 +96,7 @@ def register_cpcv_tool(agent: Agent[AgentDeps, object]) -> None:
             },
             provenance=Provenance(
                 source=f"db.backtest_runs:cpcv:{strategy_id}",
-                as_of=until or datetime.now(),
+                as_of=until or datetime.now(tz=UTC),
                 rows=result.n_paths,
                 warnings=(
                     [f"DSR={result.deflated_sharpe} < 0.5: overfit warning"]

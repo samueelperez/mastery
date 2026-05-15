@@ -383,7 +383,6 @@ class PostMortemResponse(BaseModel):
     confidence_calibration: str
     factor_verdicts: dict[str, Any]
     lesson_es: str
-    summary_es: str
     counterfactual_es: str | None
     entry_vs_exit_delta: dict[str, Any] | None
     citations: list[dict[str, Any]]

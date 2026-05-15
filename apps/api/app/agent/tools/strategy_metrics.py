@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
@@ -45,11 +45,12 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                 data=data,
                 provenance=Provenance(
                     source="strategies.registry",
-                    as_of=datetime.now(),
+                    as_of=datetime.now(tz=UTC),
                     rows=len(STRATEGY_REGISTRY),
                 ),
             )
 
+        uid = ctx.deps.user_id
         async with ctx.deps.session_factory() as session:
             if run_id is not None:
                 row = (
@@ -60,10 +61,10 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                                    range_start, range_end, fees_bps, slippage_atr,
                                    metrics, status, created_at
                             FROM backtest_runs
-                            WHERE id = CAST(:rid AS uuid)
+                            WHERE id = CAST(:rid AS uuid) AND user_id = :uid
                             """
                         ),
-                        {"rid": run_id},
+                        {"rid": run_id, "uid": uid},
                     )
                 ).mappings().one_or_none()
                 if not row:
@@ -71,7 +72,7 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                         data={"error": "run not found", "run_id": run_id},
                         provenance=Provenance(
                             source=f"db.backtest_runs:{run_id}",
-                            as_of=datetime.now(),
+                            as_of=datetime.now(tz=UTC),
                             rows=0,
                             warnings=[f"run_id {run_id} not in backtest_runs"],
                         ),
@@ -85,17 +86,17 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                     ),
                 )
 
-            # strategy_id: aggregate + last run
+            # strategy_id: aggregate + last run (per-user scoped)
             agg = (
                 await session.execute(
                     text(
                         """
                         SELECT strategy_id, last_run_id, n_runs, best_dsr, last_updated
                         FROM strategy_metrics
-                        WHERE strategy_id = :sid
+                        WHERE strategy_id = :sid AND user_id = :uid
                         """
                     ),
-                    {"sid": strategy_id},
+                    {"sid": strategy_id, "uid": uid},
                 )
             ).mappings().one_or_none()
             recent = (
@@ -105,12 +106,12 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                         SELECT id, params, symbol, timeframe, range_start, range_end,
                                metrics, created_at
                         FROM backtest_runs
-                        WHERE strategy_id = :sid
+                        WHERE strategy_id = :sid AND user_id = :uid
                         ORDER BY created_at DESC
                         LIMIT 5
                         """
                     ),
-                    {"sid": strategy_id},
+                    {"sid": strategy_id, "uid": uid},
                 )
             ).mappings().all()
 
@@ -125,7 +126,7 @@ def register_strategy_metrics_tool(agent: Agent[AgentDeps, object]) -> None:
                 },
                 provenance=Provenance(
                     source=f"db.backtest_runs:{strategy_id}",
-                    as_of=datetime.now(),
+                    as_of=datetime.now(tz=UTC),
                     rows=len(recent),
                     warnings=(
                         [f"no runs yet for {strategy_id}"] if not recent else []

@@ -23,7 +23,7 @@ def test_review_event_names_documented() -> None:
     obliga a buscar y actualizar dashboards/queries que los referencian."""
     import inspect
 
-    from app.runtime import review_dispatcher
+    from app.reviewer import dispatcher as review_dispatcher
 
     source = inspect.getsource(review_dispatcher)
     for evt in [

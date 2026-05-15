@@ -112,7 +112,6 @@ async def resolve_user_id(
         log.info(
             "auth.token_not_found",
             path=request.url.path,
-            token_prefix=token[:8],
             token_len=len(token),
         )
     return user_id

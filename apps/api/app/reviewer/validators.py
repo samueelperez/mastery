@@ -19,14 +19,7 @@ from app.agent.deps import AgentDeps
 from app.agent.models import TradeReview
 
 
-def _collect_tool_names(messages: list[ModelRequest | ModelResponse]) -> set[str]:
-    names: set[str] = set()
-    for msg in messages:
-        if isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, ToolCallPart):
-                    names.add(part.tool_name)
-    return names
+from app.agent._validator_utils import collect_tool_names as _collect_tool_names
 
 
 def register_review_validators(agent: Agent[AgentDeps, TradeReview]) -> None:

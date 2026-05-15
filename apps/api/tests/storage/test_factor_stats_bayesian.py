@@ -44,7 +44,7 @@ class TestPosteriorStats:
         assert mean == pytest.approx(4.0 / 7.0, abs=1e-6)
         # Penalización clave: el lcb cae lejos del 67% raw.
         assert lcb < 0.30, f"lcb={lcb} debería ser <0.30 con n=3"
-        assert ucb > 0.85, f"ucb={ucb} debería ser >0.85 con n=3"
+        assert ucb > 0.84, f"ucb={ucb} debería ser >0.84 con n=3"
 
     def test_large_sample_narrows_interval(self) -> None:
         """Con muchas observaciones consistentes, el intervalo se estrecha

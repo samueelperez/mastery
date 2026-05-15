@@ -82,7 +82,7 @@ def register_bias_tool(agent: Agent[AgentDeps, object]) -> None:
             data=out,
             provenance=Provenance(
                 source="db.bias_events",
-                as_of=cached[0].detected_at if cached else datetime.fromtimestamp(0),
+                as_of=cached[0].detected_at if cached else datetime.fromtimestamp(0, tz=UTC),
                 rows=len(out),
                 warnings=[] if cached else ["no bias events yet — journal too small"],
             ),

@@ -16,7 +16,7 @@ from app.liquidation.models import (
 
 @pytest.fixture
 def now_utc() -> datetime:
-    return datetime(2026, 5, 13, 12, 0, 0, tzinfo=UTC)
+    return datetime.now(tz=UTC)
 
 
 @pytest.fixture
