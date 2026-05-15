@@ -6,7 +6,7 @@ This spec defines the Pydantic models and the SQL migration that the rest of the
 
 <deliverables>
 - `apps/api/app/liquidation/models.py` — Pydantic models.
-- `apps/api/alembic/versions/026_liquidation_engine.py` — Alembic migration.
+- `apps/api/alembic/versions/025_liquidation_engine.py` — Alembic migration.
 - `apps/api/tests/liquidation/test_models.py` — unit tests for model validation.
 </deliverables>
 
@@ -220,9 +220,9 @@ class ProviderWeight(BaseModel):
 ```python
 """Liquidation heatmap engine — buckets, addresses, agreement log
 
-Revision ID: 026
-Revises: 025
-Create Date: 2026-05-12
+Revision ID: 025_liquidation_engine
+Revises: 024_paper_trading_engine
+Create Date: 2026-05-12 12:00:00.000000
 
 """
 from collections.abc import Sequence
@@ -231,8 +231,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "026"
-down_revision: str | None = "025"
+revision: str = "025_liquidation_engine"
+down_revision: str | None = "024_paper_trading_engine"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -581,9 +581,7 @@ class TestProviderHeatmap:
 
 <gotchas>
 - `Provenance` is reused from `agent/tools/_envelope.py`. Don't duplicate. If the import fails, that file is missing — fix that import path first, don't redefine.
-- The migration depends on revision `025` (`025_postmortem_drop_summary_es`) existing. If the current head doesn't match, regenerate it with `alembic heads`.
-- This repo uses bare-numeric revision IDs (e.g. `"024"`, `"025"`, `"026"`) — NOT verbose names like `"024_paper_trading_engine"`. Keep that convention in any new migration. Verified against `022`-`025` in `apps/api/alembic/versions/`.
-- Original draft of this spec assumed `025` was free; it was consumed by `025_postmortem_drop_summary_es` during the `refactor/modularize` work. The Day-1 PR renumbered to `026` and updated this spec in the same commit.
+- The migration depends on `024_paper_trading_engine` existing. If the current `down_revision` doesn't match what's in your repo, regenerate it with `alembic heads`.
 - `JSONB` and `UUID` types are imported via `sa.dialects.postgresql`. Don't try `sa.JSONB` — doesn't exist.
 - `server_default="{}"` for arrays needs the column type to be set BEFORE the default; SQLAlchemy generates `ARRAY(TEXT)[]` syntax correctly only with the type pre-declared.
 - Address format check uses Postgres `~` regex operator. Test it manually before relying.
