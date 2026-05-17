@@ -482,6 +482,26 @@ export async function rejectSetupRequest(setupId: string): Promise<void> {
   if (!res.ok) throw new Error(`rejectSetupRequest failed: ${res.status}`)
 }
 
+export interface AnalyzeSetupResponse {
+  status: "ok" | "cap_reached"
+  review_id: string | null
+  trade_id: string
+}
+
+/** Manual review trigger from the diario "Analizar" button. Dispatches
+ *  the review agent regardless of cooldown/status; review surfaces in the
+ *  chat via WS once the agent completes. */
+export async function analyzeSetupRequest(
+  setupId: string,
+): Promise<AnalyzeSetupResponse> {
+  const res = await apiFetch(
+    `${env.apiUrl}/setups/${encodeURIComponent(setupId)}/analyze`,
+    { method: "POST" },
+  )
+  if (!res.ok) throw new Error(`analyzeSetupRequest failed: ${res.status}`)
+  return (await res.json()) as AnalyzeSetupResponse
+}
+
 // -----------------------------------------------------------------------------
 // Strategies winrate (PR2 surface)
 // -----------------------------------------------------------------------------

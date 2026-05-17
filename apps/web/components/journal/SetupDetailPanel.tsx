@@ -11,7 +11,7 @@ import {
   XIcon,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
 
 import {
   Accordion,
@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  analyzeSetupRequest,
   approveSetupRequest,
   cancelSetupRequest,
   fetchSetup,
@@ -113,6 +114,8 @@ export function SetupDetailPanel({
   onClose,
 }: SetupDetailPanelProps) {
   const queryClient = useQueryClient()
+  const router = useRouter()
+  const analyzeErrorTimeoutRef = useRef<number | null>(null)
   const { data, isLoading, error } = useQuery<SetupDetailDTO>({
     queryKey: ["setup-detail", setupId],
     queryFn: ({ signal }) => fetchSetup(setupId!, { signal }),
@@ -124,6 +127,27 @@ export function SetupDetailPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["setup-list"] })
       queryClient.invalidateQueries({ queryKey: ["setup-detail", setupId] })
+    },
+  })
+
+  const analyzeMutation = useMutation({
+    mutationFn: (id: string) => analyzeSetupRequest(id),
+    onSuccess: (res) => {
+      if (res.status === "cap_reached") {
+        // El backend rechazó por cap_per_setup; mantenemos el panel abierto
+        // y el botón muestra error transitorio (3s) sin redirigir.
+        if (analyzeErrorTimeoutRef.current) {
+          window.clearTimeout(analyzeErrorTimeoutRef.current)
+        }
+        analyzeErrorTimeoutRef.current = window.setTimeout(() => {
+          analyzeMutation.reset()
+        }, 3000) as unknown as number
+        return
+      }
+      // Review dispatched OK — el WS push entregará la TradeReviewCard al
+      // chat cuando el agent complete (~5-15s típicamente).
+      queryClient.invalidateQueries({ queryKey: ["setup-detail", setupId] })
+      router.push("/")
     },
   })
 
@@ -294,6 +318,22 @@ export function SetupDetailPanel({
           </AccordionItem>
         </Accordion>
       </div>
+
+      <footer className="border-t border-border px-3 py-2.5">
+        <Button
+          size="sm"
+          variant="default"
+          className="w-full font-mono text-[11px] uppercase tracking-[0.14em]"
+          disabled={analyzeMutation.isPending}
+          onClick={() => analyzeMutation.mutate(data.id)}
+        >
+          {analyzeMutation.isPending
+            ? "analizando…"
+            : analyzeMutation.data?.status === "cap_reached"
+              ? "límite alcanzado — espera o cierra setup"
+              : "analizar"}
+        </Button>
+      </footer>
 
       {data.status === "pending" && (
         <footer className="border-t border-border px-3 py-2.5">
