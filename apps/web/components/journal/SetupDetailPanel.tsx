@@ -1123,7 +1123,8 @@ function accordionDefaults({
   return out
 }
 
-function formatPrice(price: number): string {
+function formatPrice(price: number | null | undefined): string {
+  if (price == null || !Number.isFinite(price)) return "—"
   if (price >= 1000)
     return price.toLocaleString(undefined, { maximumFractionDigits: 1 })
   if (price >= 1)
@@ -1131,7 +1132,8 @@ function formatPrice(price: number): string {
   return price.toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
 
-function formatDateTime(iso: string): string {
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
   return new Date(iso).toLocaleString(undefined, {
     day: "2-digit",
     month: "2-digit",

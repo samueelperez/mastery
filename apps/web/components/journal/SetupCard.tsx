@@ -119,7 +119,8 @@ const SIDE_TINT: Record<SetupListRowDTO["side"], string> = {
   short: "border-l-2 border-[var(--short)]/60",
 }
 
-function formatPrice(price: number): string {
+function formatPrice(price: number | null | undefined): string {
+  if (price == null || !Number.isFinite(price)) return "—"
   if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 1 })
   if (price >= 1) return price.toLocaleString(undefined, { maximumFractionDigits: 3 })
   return price.toLocaleString(undefined, { maximumFractionDigits: 6 })
@@ -216,7 +217,7 @@ export function SetupCard({
               {formatPrice(setup.entry_px)}
             </span>
           </li>
-          {setup.stop_loss_px !== null && (
+          {setup.stop_loss_px != null && (
             <li className="flex items-center justify-between">
               <span className="text-[var(--fg-3)]">SL</span>
               <span className="text-[var(--short)]">
