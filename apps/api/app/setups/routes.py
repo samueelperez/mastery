@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.auth import require_user_id
 from app.core.db import session_scope
+from app.core.exchanges.binance_adapter import EXCHANGE_NAME
 from app.core.observability.metrics import setup_approval_outcome_total
 from app.reviewer.dispatcher import maybe_run_review
 from app.setups.repo import fetch_setup_by_id
@@ -233,12 +234,12 @@ async def analyze_setup(
             await session.execute(
                 text(
                     """
-                    SELECT close FROM ohlcv
-                    WHERE exchange = 'binance' AND symbol = :sym AND timeframe = '1m'
+                    SELECT c FROM ohlcv
+                    WHERE exchange = :ex AND symbol = :sym AND timeframe = '1m'
                     ORDER BY ts DESC LIMIT 1
                     """
                 ),
-                {"sym": setup.symbol},
+                {"ex": EXCHANGE_NAME, "sym": setup.symbol},
             )
         ).scalar_one_or_none()
         current_price = float(latest) if latest is not None else setup.entry_px
