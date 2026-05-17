@@ -18,6 +18,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
@@ -28,6 +29,8 @@ from sqlalchemy.exc import IntegrityError
 from app.core.auth import require_user_id
 from app.core.db import session_scope
 from app.core.observability.metrics import setup_approval_outcome_total
+from app.reviewer.dispatcher import maybe_run_review
+from app.setups.repo import fetch_setup_by_id
 
 log = structlog.get_logger("api.setups")
 router = APIRouter()
@@ -194,3 +197,69 @@ async def reject_setup(
     log.info("setup.rejected", trade_id=trade_id, user_id=user_id)
     setup_approval_outcome_total.labels(outcome="rejected").inc()
     return {"status": "rejected", "trade_id": trade_id}
+
+
+@router.post("/setups/{trade_id}/analyze", tags=["setups"])
+async def analyze_setup(
+    trade_id: str,
+    user_id: Annotated[str, Depends(require_user_id)],
+) -> dict[str, str | None]:
+    """Manually dispatch the review agent for this setup.
+
+    Triggered from the diario panel "Analizar" button. Unlike the
+    automatic dispatcher path, this:
+
+    - bypasses the cooldown gate (the user pressed the button),
+    - accepts any setup status (pending / active / closed / cancelled),
+    - still respects the per-setup cap and global concurrency semaphore,
+    - persists a `setup_events.event='review_generated'` row plus the
+      `setup_reviews` entry exactly like an automatic review, and
+    - publishes to the Valkey channel so the frontend WS picks it up.
+
+    Returns the `review_id` if the agent produced output, or `null` if
+    cap was reached. The frontend uses this signal to decide whether to
+    show "review pending" or fall back to an error toast.
+    """
+    async with session_scope() as session:
+        setup = await fetch_setup_by_id(
+            session, trade_id=trade_id, user_id=user_id
+        )
+        if setup is None:
+            raise HTTPException(status_code=404, detail="setup not found")
+        # Current price: latest closed 1m candle for the symbol. If none
+        # (fresh symbol with no ingestion yet), fall back to entry_px so
+        # the agent at least has a coherent number to anchor on.
+        latest = (
+            await session.execute(
+                text(
+                    """
+                    SELECT close FROM ohlcv
+                    WHERE exchange = 'binance' AND symbol = :sym AND timeframe = '1m'
+                    ORDER BY ts DESC LIMIT 1
+                    """
+                ),
+                {"sym": setup.symbol},
+            )
+        ).scalar_one_or_none()
+        current_price = float(latest) if latest is not None else setup.entry_px
+
+    review_id = await maybe_run_review(
+        setup=setup,
+        trigger_kind="manual_request",
+        trigger_payload={"requested_by": user_id},
+        current_price=current_price,
+        candle_ts=datetime.now(tz=UTC),
+        manual=True,
+    )
+    log.info(
+        "setup.analyze.dispatched",
+        trade_id=trade_id,
+        user_id=user_id,
+        review_id=review_id,
+        had_price=latest is not None,
+    )
+    return {
+        "status": "ok" if review_id else "cap_reached",
+        "review_id": review_id,
+        "trade_id": trade_id,
+    }

@@ -383,6 +383,10 @@ TriggerKind = Literal[
     # subsistemas uniformemente.
     "setup_closed_sl",
     "setup_closed_tp",
+    # User-initiated review from the diario panel "Analizar" button.
+    # Bypasses cooldown + status restrictions but still respects cap +
+    # concurrency semaphore. Migration 030.
+    "manual_request",
 ]
 
 

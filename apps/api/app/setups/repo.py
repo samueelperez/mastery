@@ -396,6 +396,72 @@ async def list_open_setups(session: AsyncSession) -> list[OpenSetupRow]:
     return out
 
 
+async def fetch_setup_by_id(
+    session: AsyncSession,
+    *,
+    trade_id: str,
+    user_id: str,
+) -> OpenSetupRow | None:
+    """Fetch a single setup by id scoped by user_id, regardless of status.
+
+    Used by the manual analyze endpoint — returns rows even when status
+    is closed/cancelled (the reviewer accepts any state under manual=True)."""
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT id::text, user_id, symbol, timeframe, side, status,
+                       entry_px, stop_loss_px, targets,
+                       invalidation_conditions, expires_at,
+                       proposed_at, entry_hit_at,
+                       regime, confidence, summary_es_full,
+                       confluences, scenarios,
+                       risk_state, source
+                FROM journal_trades
+                WHERE id = CAST(:tid AS uuid) AND user_id = :uid
+                """
+            ),
+            {"tid": trade_id, "uid": user_id},
+        )
+    ).mappings().one_or_none()
+    if row is None:
+        return None
+    rs_raw = row.get("risk_state")
+    if isinstance(rs_raw, str):
+        try:
+            risk_state = json.loads(rs_raw)
+        except Exception:
+            risk_state = {}
+    elif isinstance(rs_raw, dict):
+        risk_state = rs_raw
+    else:
+        risk_state = {}
+    return OpenSetupRow(
+        id=row["id"],
+        user_id=row["user_id"],
+        symbol=row["symbol"],
+        timeframe=row["timeframe"],
+        side=row["side"],
+        status=row["status"],
+        entry_px=float(row["entry_px"]),
+        stop_loss_px=(
+            float(row["stop_loss_px"]) if row["stop_loss_px"] is not None else None
+        ),
+        targets=list(row["targets"] or []),
+        invalidation_conditions=list(row["invalidation_conditions"] or []),
+        expires_at=row["expires_at"],
+        proposed_at=row["proposed_at"],
+        entry_hit_at=row["entry_hit_at"],
+        regime=row.get("regime"),
+        confidence=row.get("confidence"),
+        summary_es_full=row.get("summary_es_full"),
+        confluences=list(row.get("confluences") or []),
+        scenarios=list(row.get("scenarios") or []),
+        risk_state=risk_state,
+        source=row.get("source") or "agent_proposal",
+    )
+
+
 async def list_setups(
     session: AsyncSession,
     *,

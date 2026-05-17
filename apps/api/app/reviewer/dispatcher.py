@@ -29,6 +29,7 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.reviewer.agent import REVIEW_MODEL_ID, get_review_agent
 from app.reviewer.repo import (
+    claim_manual_review_slot,
     claim_review_slot,
     compute_next_review_at,
     get_last_reviews,
@@ -58,9 +59,14 @@ async def maybe_run_review(
     trigger_payload: dict[str, Any],
     current_price: float,
     candle_ts: datetime,
+    manual: bool = False,
 ) -> str | None:
     """Fire-and-forget entry point. Devuelve el review_id si se emitió, None
-    si cooldown/cap/status-changed bloqueó la ejecución."""
+    si cooldown/cap/status-changed bloqueó la ejecución.
+
+    `manual=True` (from the diario "Analizar" button) bypasses the cooldown
+    gate and accepts any setup status — only the per-setup cap and the
+    global concurrency semaphore remain as safeguards."""
     settings = get_settings()
     try:
         return await _maybe_run_review_inner(
@@ -70,6 +76,7 @@ async def maybe_run_review(
             current_price=current_price,
             candle_ts=candle_ts,
             settings=settings,
+            manual=manual,
         )
     except Exception as exc:
         log.warning(
@@ -90,6 +97,7 @@ async def _maybe_run_review_inner(
     current_price: float,
     candle_ts: datetime,
     settings: Any,
+    manual: bool = False,
 ) -> str | None:
     # 1a) Discriminate cap_reached antes del claim para distinguir el log:
     #     una read-only query barata; el claim hace el UPDATE atómico real.
@@ -117,18 +125,27 @@ async def _maybe_run_review_inner(
     #     last_review_attempt_at. Si rebota → otro proceso reclamó o cap
     #     (1a normalmente captura el cap antes — la guard aquí es defensa
     #     en profundidad para una race entre la read y el claim).
+    #     Manual triggers skip the cooldown gate but keep the cap check.
     async with session_scope() as session:
-        claimed = await claim_review_slot(
-            session,
-            trade_id=setup.id,
-            cooldown_minutes=settings.review_cooldown_min_minutes,
-            max_reviews=settings.review_max_per_setup,
-        )
+        if manual:
+            claimed = await claim_manual_review_slot(
+                session,
+                trade_id=setup.id,
+                max_reviews=settings.review_max_per_setup,
+            )
+        else:
+            claimed = await claim_review_slot(
+                session,
+                trade_id=setup.id,
+                cooldown_minutes=settings.review_cooldown_min_minutes,
+                max_reviews=settings.review_max_per_setup,
+            )
     if not claimed:
         log.debug(
             "review.cooldown_blocked",
             setup_id=setup.id,
             trigger_kind=trigger_kind,
+            manual=manual,
         )
         return None
 
@@ -142,7 +159,9 @@ async def _maybe_run_review_inner(
         async with sem:
             # 3) Re-verify status DESPUÉS del cooldown claim — el setup pudo
             #    haber cerrado (SL hit, todos TPs) mientras esperábamos slot.
-            status_ok = await _setup_is_open_for_review(setup.id)
+            #    Manual triggers tolerate closed/cancelled — the user
+            #    explicitly asked for a current-state read.
+            status_ok = manual or await _setup_is_open_for_review(setup.id)
             if not status_ok:
                 # Setup ya cerrado — liberamos el claim porque no habrá review.
                 async with session_scope() as session:

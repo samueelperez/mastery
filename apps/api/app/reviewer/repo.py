@@ -84,6 +84,33 @@ async def claim_review_slot(
     return int(result.rowcount) > 0  # type: ignore[attr-defined]
 
 
+async def claim_manual_review_slot(
+    session: AsyncSession,
+    *,
+    trade_id: str,
+    max_reviews: int,
+) -> bool:
+    """Manual variant of `claim_review_slot` for user-initiated analyses.
+
+    Bypasses the cooldown gate (the user pressed the button explicitly),
+    but still enforces the per-setup cap to prevent unbounded cost. Bumps
+    `last_review_attempt_at` so telemetry stays coherent and the
+    release-on-failure path can clean up if the agent fails.
+    """
+    result = await session.execute(
+        text(
+            """
+            UPDATE journal_trades
+            SET last_review_attempt_at = now()
+            WHERE id = CAST(:tid AS uuid)
+              AND review_count < :cap
+            """
+        ),
+        {"tid": trade_id, "cap": max_reviews},
+    )
+    return int(result.rowcount) > 0  # type: ignore[attr-defined]
+
+
 async def release_review_claim_on_failure(
     session: AsyncSession, *, trade_id: str
 ) -> None:
